@@ -1,29 +1,28 @@
 """
-Loads the three NBC CSVs into memory once, at import time.
-Exposes helper functions for querying them.
+NBC Command Center data layer.
+
+Loads the three NBC CSVs once and exposes customer and portfolio queries.
+The dashboard is read-only: no model inference is executed at runtime.
 """
 from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+import re
 
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "Banking Datasets - Marketing Targets" / "historic_nbcs"
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "Data"
 
 MAIN_DATA_PATH = DATA_DIR / "main_dataset_scored_20sep2026.csv"
 INTERACTION_DATA_PATH = DATA_DIR / "customer_last_interaction.csv"
 HISTORY_DATA_PATH = DATA_DIR / "nbc1_historic_18points_long.csv"
 
 
-# -----------------------------------------------------------------------------
-# Column contracts
-# -----------------------------------------------------------------------------
 MAIN_REQUIRED = [
     "synthetic_link_id",
-    "Term Deposit Prediction",
-    "Insurance Prediction",
     "NBC1",
     "NBC2",
     "NBC3",
@@ -79,53 +78,32 @@ INSURANCE_PROFILE_COLS = [
     "motor_Response",
 ]
 
-NBC_SIGNAL_COLS = [
-    "kyc_status",
-    "marketing_consent_flag",
-    "aml_fraud_flag",
-    "dpd_days",
-    "collections_flag",
-    "open_complaint_flag",
-    "churn_score",
-    "nps_score",
-    "strategic_campaign_active_flag",
-    "strategic_campaign_product",
-    "preapproval_flag",
-    "preapproved_product",
-    "offer_affinity_score_term",
-    "offer_affinity_score_insurance",
-    "product_margin_term_deposit",
-    "product_margin_insurance",
-    "preferred_channel",
-    "channel_affinity_score",
-]
+
+def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove BOM/whitespace around column names without changing their meaning."""
+    df = df.copy()
+    df.columns = [
+        re.sub(r"^\ufeff+", "", str(col)).strip()
+        for col in df.columns
+    ]
+    return df
 
 
-# -----------------------------------------------------------------------------
-# Validation
-# -----------------------------------------------------------------------------
 def _require(df: pd.DataFrame, cols: list[str], filename: str) -> None:
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise ValueError(
-            f"{filename} is missing columns: {', '.join(missing)}"
+            f"{filename} is missing required columns: {', '.join(missing)}"
         )
 
 
-# -----------------------------------------------------------------------------
-# Date parsing
-# -----------------------------------------------------------------------------
 def _parse_day_first_date_series(series: pd.Series) -> pd.Series:
     """
-    Parse source dates with an explicit day-first interpretation.
+    Parse DD/MM/YYYY or DD-MM-YYYY values explicitly.
 
-    Handles:
-        10/09/2026
-        10-09-2026
+    Trailing time text is ignored, e.g.:
         10/09/2026 00:00:00
         10-09-2026 00:00:00
-
-    Values without a recognizable day/month/year pattern become NaT.
     """
     values = series.astype("string").str.strip()
 
@@ -153,17 +131,64 @@ def _parse_day_first_date_series(series: pd.Series) -> pd.Series:
     )
 
 
-# -----------------------------------------------------------------------------
-# Data store
-# -----------------------------------------------------------------------------
+def _normalise_id(series: pd.Series) -> pd.Series:
+    return series.astype("string").str.strip()
+
+
+def _normalised_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+
+def _resolve_column(columns, requested: str) -> str | None:
+    """Resolve exact, case-insensitive, then punctuation-insensitive column names."""
+    if requested in columns:
+        return requested
+
+    requested_lower = requested.lower()
+    for col in columns:
+        if str(col).lower() == requested_lower:
+            return col
+
+    target = _normalised_name(requested)
+    for col in columns:
+        if _normalised_name(col) == target:
+            return col
+
+    return None
+
+
 class DataStore:
     def __init__(self) -> None:
         if not MAIN_DATA_PATH.exists():
-            raise FileNotFoundError(f"Missing {MAIN_DATA_PATH.name}")
+            raise FileNotFoundError(f"Missing {MAIN_DATA_PATH}")
 
-        # Main scored dataset
-        self.main = pd.read_csv(MAIN_DATA_PATH)
+        if not INTERACTION_DATA_PATH.exists():
+            raise FileNotFoundError(f"Missing {INTERACTION_DATA_PATH}")
+
+        if not HISTORY_DATA_PATH.exists():
+            raise FileNotFoundError(f"Missing {HISTORY_DATA_PATH}")
+
+        self.main = _clean_columns(pd.read_csv(MAIN_DATA_PATH, skipinitialspace=True))
+        self.interactions = _clean_columns(
+            pd.read_csv(INTERACTION_DATA_PATH, skipinitialspace=True)
+        )
+        self.history = _clean_columns(
+            pd.read_csv(HISTORY_DATA_PATH, skipinitialspace=True)
+        )
+
         _require(self.main, MAIN_REQUIRED, MAIN_DATA_PATH.name)
+        _require(self.interactions, INTERACTION_REQUIRED, INTERACTION_DATA_PATH.name)
+        _require(self.history, HISTORY_REQUIRED, HISTORY_DATA_PATH.name)
+
+        self.main["synthetic_link_id"] = _normalise_id(
+            self.main["synthetic_link_id"]
+        )
+        self.interactions["synthetic_link_id"] = _normalise_id(
+            self.interactions["synthetic_link_id"]
+        )
+        self.history["synthetic_link_id"] = _normalise_id(
+            self.history["synthetic_link_id"]
+        )
 
         self.main["nbc_score_date"] = _parse_day_first_date_series(
             self.main["nbc_score_date"]
@@ -171,63 +196,22 @@ class DataStore:
         self.main["last_action_date"] = _parse_day_first_date_series(
             self.main["last_action_date"]
         )
-
-        # Customer interaction dataset
-        if not INTERACTION_DATA_PATH.exists():
-            raise FileNotFoundError(f"Missing {INTERACTION_DATA_PATH.name}")
-
-        self.interactions = pd.read_csv(INTERACTION_DATA_PATH)
-        _require(
-            self.interactions,
-            INTERACTION_REQUIRED,
-            INTERACTION_DATA_PATH.name,
-        )
-
-        self.interactions["last_interaction_date"] = (
-            _parse_day_first_date_series(
-                self.interactions["last_interaction_date"]
-            )
-        )
-
-        # Historical NBC1 dataset
-        if not HISTORY_DATA_PATH.exists():
-            raise FileNotFoundError(f"Missing {HISTORY_DATA_PATH.name}")
-
-        self.history = pd.read_csv(HISTORY_DATA_PATH)
-        _require(
-            self.history,
-            HISTORY_REQUIRED,
-            HISTORY_DATA_PATH.name,
-        )
-
-        self.history["point_in_time"] = pd.to_numeric(
-            self.history["point_in_time"],
-            errors="coerce",
+        self.interactions["last_interaction_date"] = _parse_day_first_date_series(
+            self.interactions["last_interaction_date"]
         )
         self.history["nbc_date"] = _parse_day_first_date_series(
             self.history["nbc_date"]
         )
-
-        # Customer IDs
-        self.main["synthetic_link_id"] = (
-            self.main["synthetic_link_id"].astype(str)
-        )
-        self.interactions["synthetic_link_id"] = (
-            self.interactions["synthetic_link_id"].astype(str)
-        )
-        self.history["synthetic_link_id"] = (
-            self.history["synthetic_link_id"].astype(str)
+        self.history["point_in_time"] = pd.to_numeric(
+            self.history["point_in_time"],
+            errors="coerce",
         )
 
-        # Fast customer lookup
         self._main_by_id = self.main.set_index(
             "synthetic_link_id",
             drop=False,
         )
 
-    # -------------------------------------------------------------------------
-    # Customer queries
-    # -------------------------------------------------------------------------
     def customer_ids(self) -> list[str]:
         return sorted(
             self.main["synthetic_link_id"]
@@ -237,21 +221,19 @@ class DataStore:
         )
 
     def snapshot_date(self):
-        s = self.main["nbc_score_date"].dropna()
-        return s.iloc[0] if not s.empty else None
+        dates = self.main["nbc_score_date"].dropna()
+        return dates.iloc[0] if not dates.empty else None
 
     def get_customer(self, cid: str) -> pd.Series | None:
         if cid not in self._main_by_id.index:
             return None
 
         row = self._main_by_id.loc[cid]
-
         if isinstance(row, pd.DataFrame):
             row = row.iloc[0]
-
         return row
 
-    def get_interaction(self, cid: str):
+    def get_interaction(self, cid: str) -> pd.Series | None:
         rows = self.interactions.loc[
             self.interactions["synthetic_link_id"] == cid
         ]
@@ -270,22 +252,85 @@ class DataStore:
         ].copy()
 
         return rows.sort_values(
-            ["point_in_time", "nbc_date"]
+            ["point_in_time", "nbc_date"],
+            ascending=[True, True],
         )
 
-    # -------------------------------------------------------------------------
-    # Fixed portfolio history for the NBC History tab
-    # -------------------------------------------------------------------------
+    def _profile_rows(
+        self,
+        customer: pd.Series,
+        requested_columns: list[str],
+        prefix: str,
+    ) -> list[dict]:
+        """
+        Build profile rows with resilient column resolution.
+
+        The preferred contract is exact names such as term_age / motor_Age.
+        If those names have harmless casing/punctuation differences, they are
+        still resolved. Additional columns sharing the profile prefix are
+        appended after the documented fields.
+        """
+        out: list[dict] = []
+        seen: set[str] = set()
+        columns = list(customer.index)
+
+        def append_column(actual: str, requested: str | None = None) -> None:
+            if actual in seen:
+                return
+
+            label_source = requested or actual
+            value = customer[actual]
+            out.append(
+                {
+                    "field": str(label_source),
+                    "value": value,
+                }
+            )
+            seen.add(actual)
+
+        # Documented fields first.
+        for requested in requested_columns:
+            actual = _resolve_column(columns, requested)
+            if actual is not None:
+                append_column(actual, requested)
+
+        # Then any additional source columns with the same prefix.
+        prefix_lower = prefix.lower()
+        for actual in columns:
+            actual_str = str(actual)
+            if actual in seen:
+                continue
+            if actual_str.lower().startswith(prefix_lower):
+                append_column(actual)
+
+        return out
+
+    def get_term_profile(self, cid: str) -> list[dict]:
+        customer = self.get_customer(cid)
+        return (
+            self._profile_rows(customer, TERM_PROFILE_COLS, "term_")
+            if customer is not None
+            else []
+        )
+
+    def get_insurance_profile(self, cid: str) -> list[dict]:
+        customer = self.get_customer(cid)
+        return (
+            self._profile_rows(customer, INSURANCE_PROFILE_COLS, "motor_")
+            if customer is not None
+            else []
+        )
+
     def portfolio_top3_by_point(self) -> dict:
         """
-        Build the fixed portfolio view requested for the NBC History tab.
+        Fixed portfolio view.
 
-        For each point:
+        For each historical point:
           1. count customers by NBC1
-          2. rank NBC1 states by customer count
-          3. retain only the top three states
+          2. retain the top three NBC1 states
+          3. return a series suitable for a stacked bar chart
 
-        The result is independent of the selected customer.
+        This result is completely independent of the selected customer.
         """
         frame = self.history[
             ["point_in_time", "nbc_date", "NBC1"]
@@ -316,11 +361,11 @@ class DataStore:
         top3 = counts.loc[counts["rank"] <= 3].copy()
 
         points = sorted(
-            int(p)
-            for p in top3["point_in_time"].dropna().unique()
+            int(point)
+            for point in top3["point_in_time"].dropna().unique()
         )
 
-        # One representative NBC date per point.
+        # Use P1...P18 on the x-axis. Dates remain available in hover text.
         point_dates: dict[int, str] = {}
         for point in points:
             rows = frame.loc[
@@ -334,8 +379,6 @@ class DataStore:
                 else "—"
             )
 
-        # Stable series/legend order based on total customers represented
-        # across the retained top-3 states, then alphabetical tie-break.
         state_order = (
             top3.groupby("NBC1")["customers"]
             .sum()
@@ -343,22 +386,16 @@ class DataStore:
         )
         states = state_order.index.tolist()
 
-        series = []
+        series: list[dict] = []
         for state in states:
-            values = []
-
+            values: list[int] = []
             for point in points:
                 match = top3.loc[
                     (top3["point_in_time"] == point)
                     & (top3["NBC1"] == state),
                     "customers",
                 ]
-
-                values.append(
-                    int(match.iloc[0])
-                    if not match.empty
-                    else 0
-                )
+                values.append(int(match.iloc[0]) if not match.empty else 0)
 
             series.append(
                 {
@@ -367,9 +404,7 @@ class DataStore:
                 }
             )
 
-        # Useful for hover/readout validation.
         top3_lookup: dict[str, list[dict]] = {}
-
         for point in points:
             rows = top3.loc[
                 top3["point_in_time"] == point
@@ -388,27 +423,12 @@ class DataStore:
 
         return {
             "points": points,
-            "point_dates": [point_dates[p] for p in points],
+            "point_dates": [point_dates[point] for point in points],
             "series": series,
             "top3_by_point": top3_lookup,
         }
 
-    def portfolio_counts(self, top: int = 10) -> pd.Series:
-        """
-        Backward-compatible overall NBC1 counts.
-        """
-        states = (
-            self.history["NBC1"]
-            .fillna("Blank")
-            .astype(str)
-        )
 
-        return states.value_counts().head(top)
-
-
-# -----------------------------------------------------------------------------
-# Singleton datastore
-# -----------------------------------------------------------------------------
 @lru_cache(maxsize=1)
 def get_store() -> DataStore:
     return DataStore()

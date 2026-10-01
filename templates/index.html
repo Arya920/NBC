@@ -3,281 +3,340 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="NBC Customer Command Center" />
     <title>NBC Command Center</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+        rel="stylesheet"
+    />
+
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 </head>
 <body>
-    <div class="app-shell">
+<div class="app-shell">
 
-        <!-- ========================= SIDEBAR ========================= -->
-        <aside class="sidebar">
-            <div class="sidebar-title">NBC Command Center</div>
-            <div class="sidebar-sub">Pre-scored customer intelligence in a focused, read-only workspace.</div>
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-mark">N</div>
+            <div>
+                <div class="sidebar-title">NBC Command Center</div>
+                <div class="sidebar-sub">Read-only customer and portfolio intelligence.</div>
+            </div>
+        </div>
 
-            <div class="sidebar-label">Customer navigation</div>
+        <div class="sidebar-section customer-scope" id="customer-navigation-scope">
+            <div class="sidebar-label">Customer</div>
 
-            <div class="combobox" id="customer-combobox">
+            <div class="customer-picker" id="customer-combobox">
                 <input
-                    type="text"
                     id="customer-search"
-                    placeholder="Type synthetic_link_id…"
+                    type="text"
+                    placeholder="Search synthetic_link_id"
                     autocomplete="off"
+                    aria-label="Search customer"
                 />
-                <ul class="combobox-list hidden" id="customer-list"></ul>
+                <span class="picker-icon">⌕</span>
+                <ul class="customer-list hidden" id="customer-list"></ul>
             </div>
 
-            <div class="sidebar-label" style="margin-top: 26px;">Dataset status</div>
-            <div class="sidebar-chips" id="dataset-status">
-                <span class="chip">Loading…</span>
+            <div class="sidebar-hint">
+                Select a customer to refresh all customer-level views.
             </div>
-        </aside>
+        </div>
 
-        <!-- ========================== MAIN =========================== -->
-        <main class="main">
+        <div class="sidebar-section">
+            <div class="sidebar-label">Dataset</div>
+            <div id="dataset-status" class="dataset-status">
+                <span class="status-chip">Loading…</span>
+            </div>
+        </div>
 
-            <!-- Brand row -->
-            <div class="brand-row">
-                <div class="brand-left">
-                    <div class="brand-mark">N</div>
+        <div class="sidebar-foot">
+            <span class="foot-dot"></span>
+            <span>Snapshot · read only</span>
+        </div>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div>
+                <div class="brand-name">Next Best Action</div>
+                <div class="brand-sub">Customer decision intelligence · scored snapshot</div>
+            </div>
+            <div class="status-pill">LIVE SNAPSHOT</div>
+        </header>
+
+        <nav class="primary-nav" id="main-tabs" aria-label="Primary navigation">
+            <button class="primary-nav-link active" type="button" data-workspace="product">
+                Product
+            </button>
+            <button class="primary-nav-link" type="button" data-workspace="service">
+                Service
+            </button>
+        </nav>
+
+        <!-- Product -->
+        <section class="workspace-panel" data-workspace-panel="product">
+            <div class="product-empty">
+                <div class="empty-orb">P</div>
+                <div class="eyebrow">Product workspace</div>
+                <h1>Product intelligence</h1>
+                <p>Reserved for product-led decisioning. No product content is exposed yet.</p>
+            </div>
+        </section>
+
+        <!-- Service -->
+        <section class="workspace-panel active" data-workspace-panel="service">
+
+            <!-- Customer intelligence -->
+            <section class="service-page active" data-service-page="customer">
+                <div class="service-header">
                     <div>
-                        <div class="brand-name">Next Best Action</div>
-                        <div class="brand-sub">Customer decision intelligence · scored snapshot</div>
+                        <div class="eyebrow">Service intelligence</div>
+                        <h1>Customer intelligence</h1>
+                        <p>Current next-best actions, customer context and NBC1 history.</p>
                     </div>
-                </div>
-                <div class="status-pill">● LIVE SNAPSHOT · READ ONLY</div>
-            </div>
 
-            <!-- Hero -->
-            <div class="customer-hero">
-                <div class="eyebrow">Customer command view</div>
-                <div class="hero-id" id="hero-id">—</div>
-                <div class="hero-meta">Current recommendation stack and recent customer activity.</div>
-                <div class="hero-chip-row" id="hero-chips"></div>
-            </div>
-
-            <!-- Tabs -->
-            <nav class="tabs" id="main-tabs">
-                <button class="tab active" data-tab="overview">Overview</button>
-                <button class="tab" data-tab="context">Customer context</button>
-                <button class="tab" data-tab="history">NBC history</button>
-            </nav>
-
-            <!-- -------------------- OVERVIEW -------------------- -->
-            <section class="tab-panel active" data-panel="overview">
-
-                <div class="section-label">
-                    <div class="section-title">Current next-best-action stack</div>
-                    <div class="section-note">Read directly from the 20-Sep-2026 scored snapshot</div>
+                    <button class="portfolio-launch" id="open-portfolio" type="button">
+                        <span class="launch-kicker">PORTFOLIO VIEW</span>
+                        <span class="launch-title">Open NBC1 history</span>
+                        <span class="launch-arrow">→</span>
+                    </button>
                 </div>
 
-                <div class="nbc-grid">
-                    <div class="nbc-card primary">
-                        <div class="nbc-index">NBC 1 · PRIMARY</div>
-                        <div class="nbc-value" id="nbc1-value">—</div>
-                        <div class="nbc-footer">Highest-priority current action</div>
+                <section class="customer-hero" id="customer-hero">
+                    <div class="hero-main">
+                        <div class="eyebrow">Selected customer</div>
+                        <div class="hero-id" id="hero-id">—</div>
                     </div>
-                    <div class="nbc-card">
-                        <div class="nbc-index">NBC 2 · SECONDARY</div>
-                        <div class="nbc-value" id="nbc2-value">—</div>
-                        <div class="nbc-footer">Second recommendation</div>
-                    </div>
-                    <div class="nbc-card">
-                        <div class="nbc-index">NBC 3 · TERTIARY</div>
-                        <div class="nbc-value" id="nbc3-value">—</div>
-                        <div class="nbc-footer">Third recommendation</div>
-                    </div>
-                </div>
-
-
-                <div class="section-label">
-                    <div class="section-title">Recent customer activity</div>
-                    <div class="section-note">Latest action and most recent recorded interaction</div>
-                </div>
-
-                <div class="activity-grid">
-                    <div class="activity-card action-card">
-                        <div class="activity-card-head">
-                            <div>
-                                <div class="activity-kicker">Last action</div>
-                                <div class="activity-title">Most recent action taken</div>
-                            </div>
-                            <div class="activity-date" id="ctx-action-date">—</div>
+                    <div class="hero-meta">
+                        <div class="hero-meta-item">
+                            <span>Score date</span>
+                            <strong id="hero-score-date">—</strong>
                         </div>
-                        <div class="activity-body" id="ctx-last-action">—</div>
-                        <div class="activity-meta">
-                            <span>Channel</span>
-                            <strong id="ctx-channel">—</strong>
+                        <div class="hero-meta-item">
+                            <span>Preferred channel</span>
+                            <strong id="hero-channel">—</strong>
+                        </div>
+                        <div class="hero-meta-item">
+                            <span>Last action</span>
+                            <strong id="hero-last-action-date">—</strong>
                         </div>
                     </div>
+                </section>
 
-                    <div class="activity-card interaction-card">
-                        <div class="activity-card-head">
-                            <div>
-                                <div class="activity-kicker">Last interaction</div>
-                                <div class="activity-title">Most recent customer contact</div>
+                <!-- Current decision surface -->
+                <section class="content-section">
+                    <div class="section-header">
+                        <div>
+                            <div class="section-kicker">01</div>
+                            <h2>Current next-best actions</h2>
+                        </div>
+                        <div class="section-note">Current scored snapshot</div>
+                    </div>
+
+                    <div class="nbc-grid">
+                        <article class="nbc-card primary">
+                            <div class="card-kicker">NBC 1 · PRIMARY</div>
+                            <div class="nbc-value" id="nbc1-value">—</div>
+                            <div class="card-foot">Highest-priority action</div>
+                        </article>
+
+                        <article class="nbc-card">
+                            <div class="card-kicker">NBC 2 · SECONDARY</div>
+                            <div class="nbc-value" id="nbc2-value">—</div>
+                            <div class="card-foot">Secondary action</div>
+                        </article>
+
+                        <article class="nbc-card">
+                            <div class="card-kicker">NBC 3 · TERTIARY</div>
+                            <div class="nbc-value" id="nbc3-value">—</div>
+                            <div class="card-foot">Tertiary action</div>
+                        </article>
+                    </div>
+
+                    <div class="activity-grid">
+                        <article class="activity-card">
+                            <div class="card-kicker">RECENT ACTION</div>
+                            <div class="activity-value" id="ctx-last-action">—</div>
+                            <div class="activity-meta">
+                                <span id="ctx-channel">—</span>
+                                <span id="ctx-action-date">—</span>
                             </div>
+                        </article>
+
+                        <article class="activity-card interaction">
+                            <div class="card-kicker">LAST INTERACTION</div>
                             <div class="activity-date" id="interaction-date">—</div>
-                        </div>
-                        <div class="activity-body" id="interaction-text">—</div>
+                            <div class="activity-value interaction-value" id="interaction-text">
+                                —
+                            </div>
+                        </article>
                     </div>
-                </div>
+                </section>
+
+                <!-- Customer context -->
+                <section class="content-section">
+                    <div class="section-header">
+                        <div>
+                            <div class="section-kicker">02</div>
+                            <h2>Customer context</h2>
+                        </div>
+                        <div class="section-note">Compact source profile view</div>
+                    </div>
+
+                    <div class="profile-grid">
+                        <article class="profile-card">
+                            <div class="profile-card-head">
+                                <div>
+                                    <div class="profile-kicker">TERM DEPOSIT</div>
+                                    <h3>Term deposit profile</h3>
+                                </div>
+                                <span class="profile-badge">TD</span>
+                            </div>
+
+                            <div class="profile-summary" id="term-profile-summary"></div>
+
+                            <details class="source-details">
+                                <summary>View full source fields</summary>
+                                <div class="profile-table" id="term-profile-full"></div>
+                            </details>
+                        </article>
+
+                        <article class="profile-card">
+                            <div class="profile-card-head">
+                                <div>
+                                    <div class="profile-kicker">INSURANCE</div>
+                                    <h3>Insurance profile</h3>
+                                </div>
+                                <span class="profile-badge">IN</span>
+                            </div>
+
+                            <div class="profile-summary" id="insurance-profile-summary"></div>
+
+                            <details class="source-details">
+                                <summary>View full source fields</summary>
+                                <div class="profile-table" id="insurance-profile-full"></div>
+                            </details>
+                        </article>
+                    </div>
+                </section>
+
+                <!-- Customer history -->
+                <section class="content-section history-section">
+                    <div class="section-header">
+                        <div>
+                            <div class="section-kicker">03</div>
+                            <h2>NBC1 history</h2>
+                        </div>
+                        <div class="section-note" id="history-subtitle">
+                            Historical behaviour across 18 points
+                        </div>
+                    </div>
+
+                    <div class="history-metrics">
+                        <div class="history-metric">
+                            <span>History points</span>
+                            <strong id="hs-points">—</strong>
+                        </div>
+                        <div class="history-metric">
+                            <span>Most frequent state</span>
+                            <strong id="hs-dominant">—</strong>
+                        </div>
+                        <div class="history-metric">
+                            <span>Latest historical NBC1</span>
+                            <strong id="hs-latest">—</strong>
+                        </div>
+                    </div>
+
+                    <div class="history-layout">
+                        <article class="chart-card">
+                            <div class="chart-card-head">
+                                <div>
+                                    <div class="chart-kicker">CUSTOMER-LEVEL</div>
+                                    <h3>NBC1 mix</h3>
+                                    <p>Frequency of each NBC1 state across this customer's history.</p>
+                                </div>
+                            </div>
+
+                            <div class="chart customer-history-chart" id="chart-customer-distribution"></div>
+                            <div class="chart-empty hidden" id="customer-chart-empty">
+                                No historical NBC1 records are available for this customer.
+                            </div>
+                        </article>
+
+                        <aside class="history-insight-column">
+                            <article class="insight-card">
+                                <div class="card-kicker">DOMINANT BEHAVIOUR</div>
+                                <strong id="hist-dominant">—</strong>
+                                <p id="hist-readout">—</p>
+                            </article>
+
+                            <article class="insight-card secondary">
+                                <div class="card-kicker">CURRENT VS HISTORY</div>
+                                <p class="insight-main" id="current-vs-history">—</p>
+                            </article>
+                        </aside>
+                    </div>
+
+                    <details class="source-details history-details">
+                        <summary>View all 18 historical points</summary>
+                        <div class="profile-table" id="history-table"></div>
+                    </details>
+                </section>
             </section>
 
-            <!-- -------------------- CONTEXT -------------------- -->
-            <section class="tab-panel" data-panel="context">
-                <div class="section-label">
-                    <div class="section-title">Customer context</div>
-                    <div class="section-note">Detailed source fields, separated from the decision surface</div>
+            <!-- Portfolio history -->
+            <section class="service-page" data-service-page="portfolio">
+                <div class="service-header portfolio-header">
+                    <div>
+                        <div class="eyebrow">Service intelligence · Portfolio</div>
+                        <h1>NBC1 portfolio history</h1>
+                        <p>Portfolio-level composition across all customers and 18 historical points.</p>
+                    </div>
+
+                    <button class="back-button" id="back-to-customer" type="button">
+                        <span>←</span>
+                        Back to customer intelligence
+                    </button>
                 </div>
 
-                <nav class="tabs tabs-sub" id="context-tabs">
-                    <button class="tab active" data-subtab="term">Term deposit profile</button>
-                    <button class="tab" data-subtab="insurance">Insurance profile</button>
-                    <button class="tab" data-subtab="decision">Decision support</button>
-                </nav>
-
-                <div class="sub-panel active" data-subpanel="term">
-                    <p class="caption">Fields from the term-deposit source profile in the scored dataset.</p>
-                    <div class="profile-table" id="term-profile"></div>
+                <div class="portfolio-intro">
+                    <div class="portfolio-intro-mark">18</div>
+                    <div>
+                        <div class="portfolio-intro-title">18-point portfolio view</div>
+                        <p>Each stacked bar contains only the three NBC1 states with the highest customer counts at that point.</p>
+                    </div>
                 </div>
 
-                <div class="sub-panel" data-subpanel="insurance">
-                    <p class="caption">Fields from the motor/insurance source profile in the scored dataset.</p>
-                    <div class="profile-table" id="insurance-profile"></div>
-                </div>
-
-                <div class="sub-panel" data-subpanel="decision">
-                    <p class="caption">Pre-scored model outputs and supporting NBC signals for the selected customer.</p>
-
-                    <div class="decision-model-grid">
-                        <div class="prediction-card">
-                            <div class="prediction-top">
-                                <div>
-                                    <div class="prediction-title">Bank Term Deposit</div>
-                                    <div class="prediction-sub">Precomputed model prediction</div>
-                                </div>
-                                <div class="pred-pill" id="term-pill">—</div>
-                            </div>
-                            <div class="affinity-row">
-                                <div class="affinity-head">
-                                    <span>Offer affinity</span>
-                                    <strong id="term-affinity-text">—</strong>
-                                </div>
-                                <div class="affinity-track">
-                                    <div class="affinity-fill" id="term-affinity-bar" style="width: 0%"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="prediction-card">
-                            <div class="prediction-top">
-                                <div>
-                                    <div class="prediction-title">Insurance Cross-Sell</div>
-                                    <div class="prediction-sub">Precomputed model prediction</div>
-                                </div>
-                                <div class="pred-pill" id="ins-pill">—</div>
-                            </div>
-                            <div class="affinity-row">
-                                <div class="affinity-head">
-                                    <span>Offer affinity</span>
-                                    <strong id="ins-affinity-text">—</strong>
-                                </div>
-                                <div class="affinity-track">
-                                    <div class="affinity-fill" id="ins-affinity-bar" style="width: 0%"></div>
-                                </div>
-                            </div>
+                <article class="chart-card portfolio-card">
+                    <div class="chart-card-head">
+                        <div>
+                            <div class="chart-kicker">PORTFOLIO-LEVEL · STATIC</div>
+                            <h3>NBC1 composition over time</h3>
+                            <p>Customer selection has no effect on this chart.</p>
                         </div>
                     </div>
 
-                    <div class="decision-divider">
-                        <span>NBC decision signals</span>
+                    <div class="chart portfolio-chart" id="chart-portfolio"></div>
+                    <div class="chart-empty hidden" id="portfolio-chart-empty">
+                        Portfolio history could not be loaded.
                     </div>
-
-                    <div class="signal-grid" id="signals-grid"></div>
-                </div>
+                </article>
             </section>
 
-            <!-- -------------------- HISTORY -------------------- -->
-            <section class="tab-panel" data-panel="history">
-                <div class="section-label">
-                    <div class="section-title">NBC1 journey</div>
-                    <div class="section-note">18 historical points for this customer</div>
-                </div>
+        </section>
 
-                <div class="metric-strip" id="history-stats">
-                    <div class="mini-stat">
-                        <div class="mini-label">History points</div>
-                        <div class="mini-value" id="hs-points">—</div>
-                    </div>
-                    <div class="mini-stat">
-                        <div class="mini-label">Most frequent state</div>
-                        <div class="mini-value" id="hs-dominant">—</div>
-                    </div>
-                    <div class="mini-stat">
-                        <div class="mini-label">Latest historical NBC1</div>
-                        <div class="mini-value" id="hs-latest">—</div>
-                    </div>
-                </div>
+        <footer class="footer-note">
+            NBC Command Center · pre-scored CSV snapshot · no runtime model inference
+        </footer>
+    </main>
+</div>
 
-
-                <div class="section-label">
-                    <div class="section-title">Portfolio NBC1 composition</div>
-                    <div class="section-note">Top 3 NBC1 states at each point · all customers</div>
-                </div>
-
-                <div class="chart-shell portfolio-chart-shell">
-                    <div class="chart-explainer">
-                        <span class="chart-explainer-mark"></span>
-                        <span>Each bar represents one historical point. The stack contains only the three NBC1 states with the largest customer counts at that point.</span>
-                    </div>
-                    <div id="chart-portfolio" class="chart portfolio-chart"></div>
-                </div>
-
-                <div class="history-bottom">
-                    <div>
-                        <div class="section-label">
-                            <div class="section-title">Selected customer · NBC1 mix</div>
-                            <div class="section-note">Frequency across 18 historical points</div>
-                        </div>
-                        <div class="chart-shell customer-distribution-shell">
-                            <div id="chart-customer-distribution" class="chart customer-distribution-chart"></div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <div class="section-label">
-                            <div class="section-title">Customer history readout</div>
-                            <div class="section-note">Selected customer</div>
-                        </div>
-                        <div class="history-insight">
-                            <div class="insight-kicker">Dominant behaviour</div>
-                            <div class="insight-main" id="hist-dominant">—</div>
-                            <div class="insight-text history-readout-copy" id="hist-readout"></div>
-                        </div>
-
-                        <div class="current-history-card">
-                            <div class="current-history-kicker">Current vs. history</div>
-                            <div class="current-history-text" id="current-vs-history">—</div>
-                        </div>
-                    </div>
-                </div>
-
-                <details class="expander">
-                    <summary>View all 18 historical points</summary>
-                    <div class="profile-table" id="history-table"></div>
-                </details>
-
-            <!-- Footer -->
-            <div class="footer-note">
-                NBC Command Center · UI reads from pre-scored CSV snapshots only · no model inference is executed at runtime
-            </div>
-        </main>
-    </div>
-
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

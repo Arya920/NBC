@@ -1,5 +1,5 @@
 // =============================================================
-// NBC Command Center — front-end logic
+// NBC Command Center — frontend logic
 // =============================================================
 
 const state = {
@@ -7,310 +7,468 @@ const state = {
     currentId: null,
     currentPayload: null,
     portfolio: null,
-    stateColors: {},
+    workspace: 'service',
+    servicePage: 'customer',
+    customerRequestSeq: 0,
 };
 
 const PALETTE = [
-    '#42d9d0', '#6aa6ff', '#a78bfa', '#f7c873',
-    '#ff7c86', '#6fe0a9', '#8da3b8', '#dc8cff', '#7dd3fc',
+    '#42d9d0',
+    '#6aa6ff',
+    '#a78bfa',
+    '#f7c873',
+    '#ff7c86',
+    '#6fe0a9',
+    '#8da3b8',
+    '#dc8cff',
+    '#7dd3fc',
 ];
 
-const $ = (sel, root = document) => root.querySelector(sel);
-const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
-// -------------------------------------------------------------
-// Startup
-// -------------------------------------------------------------
-document.addEventListener('DOMContentLoaded', async () => {
-    bindTabs();
+document.addEventListener('DOMContentLoaded', init);
+
+async function init() {
+    bindNavigation();
+    setWorkspace('service');
+    setServicePage('customer');
+
     await loadMeta();
     await loadCustomers();
     await loadPortfolio();
-    if (state.customers.length) {
-        selectCustomer(state.customers[0]);
+
+    if (state.customers.length > 0) {
+        await selectCustomer(state.customers[0]);
+    } else {
+        showCustomerEmpty('No customers are available.');
     }
-});
+}
+
 
 // -------------------------------------------------------------
-// Tabs
+// Navigation
 // -------------------------------------------------------------
-function bindTabs() {
-    $$('#main-tabs .tab').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.dataset.tab;
-            $$('#main-tabs .tab').forEach(b => b.classList.toggle('active', b === btn));
-            $$('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === target));
-            if (target === 'history') {
-                if (state.portfolio) {
-                    renderPortfolio(state.portfolio);
-                }
-                window.dispatchEvent(new Event('resize'));
-            }
+
+function bindNavigation() {
+    $$('#main-tabs .primary-nav-link').forEach((button) => {
+        button.addEventListener('click', () => {
+            setWorkspace(button.dataset.workspace);
         });
     });
 
-    $$('#context-tabs .tab').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.dataset.subtab;
-            $$('#context-tabs .tab').forEach(b => b.classList.toggle('active', b === btn));
-            $$('.sub-panel').forEach(p => p.classList.toggle('active', p.dataset.subpanel === target));
-        });
+    $('#open-portfolio')?.addEventListener('click', () => {
+        setServicePage('portfolio');
+    });
+
+    $('#back-to-customer')?.addEventListener('click', () => {
+        setServicePage('customer');
     });
 }
 
+function setWorkspace(target) {
+    state.workspace = target;
+
+    $$('#main-tabs .primary-nav-link').forEach((button) => {
+        button.classList.toggle(
+            'active',
+            button.dataset.workspace === target
+        );
+    });
+
+    $$('[data-workspace-panel]').forEach((panel) => {
+        panel.classList.toggle(
+            'active',
+            panel.dataset.workspacePanel === target
+        );
+    });
+
+    updateCustomerScopeVisibility();
+
+    if (target === 'service') {
+        setServicePage(state.servicePage);
+    }
+}
+
+function setServicePage(target) {
+    state.servicePage = target;
+
+    $$('[data-service-page]').forEach((page) => {
+        page.classList.toggle(
+            'active',
+            page.dataset.servicePage === target
+        );
+    });
+
+    updateCustomerScopeVisibility();
+
+    requestAnimationFrame(() => {
+        if (target === 'portfolio') {
+            renderPortfolio(state.portfolio);
+        } else if (target === 'customer') {
+            renderCurrentCustomerHistory();
+        }
+
+        resizeVisibleCharts();
+    });
+}
+
+function updateCustomerScopeVisibility() {
+    const show = state.workspace === 'service' && state.servicePage === 'customer';
+
+    $('#customer-navigation-scope')?.classList.toggle('scope-hidden', !show);
+    $('#customer-hero')?.classList.toggle('scope-hidden', !show);
+}
+
+
 // -------------------------------------------------------------
-// Meta + customer list
+// Metadata / customers
 // -------------------------------------------------------------
+
 async function loadMeta() {
     try {
-        const r = await fetch('/api/meta');
-        const data = await r.json();
+        const response = await fetch('/api/meta', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Meta request failed: ${response.status}`);
+
+        const data = await response.json();
+
         const el = $('#dataset-status');
+        if (!el) return;
+
         el.innerHTML = `
-            <span class="chip">Snapshot · ${data.snapshot_date}</span>
-            <span class="chip">Customers · ${data.customer_count.toLocaleString()}</span>
-            <span class="chip">History rows · ${data.history_rows.toLocaleString()}</span>
+            <span class="status-chip">Snapshot · ${escapeHtml(data.snapshot_date)}</span>
+            <span class="status-chip">Customers · ${Number(data.customer_count || 0).toLocaleString()}</span>
+            <span class="status-chip">History rows · ${Number(data.history_rows || 0).toLocaleString()}</span>
         `;
-    } catch (e) { console.error(e); }
+    } catch (error) {
+        console.error('Meta load failed:', error);
+        setStatusMessage('Dataset status unavailable');
+    }
 }
 
 async function loadCustomers() {
-    const r = await fetch('/api/customers');
-    const data = await r.json();
-    state.customers = data.ids;
+    try {
+        const response = await fetch('/api/customers', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Customer request failed: ${response.status}`);
 
-    const input = $('#customer-search');
-    const list = $('#customer-list');
+        const data = await response.json();
+        state.customers = Array.isArray(data.ids)
+            ? data.ids.map(String)
+            : [];
 
-    const renderList = (filter = '') => {
-        const q = filter.trim().toLowerCase();
-        const items = q
-            ? state.customers.filter(c => c.toLowerCase().includes(q))
-            : state.customers;
-        const show = items.slice(0, 200);
-        list.innerHTML = show.map(c => `<li data-id="${c}">${c}</li>`).join('') ||
-            '<li style="opacity:.6;cursor:default;">No match</li>';
-    };
+        const input = $('#customer-search');
+        const list = $('#customer-list');
+        if (!input || !list) return;
 
-    input.addEventListener('focus', () => {
-        renderList(input.value);
-        list.classList.remove('hidden');
-    });
-    input.addEventListener('input', () => {
-        renderList(input.value);
-        list.classList.remove('hidden');
-    });
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            const first = list.querySelector('li[data-id]');
-            if (first) {
-                selectCustomer(first.dataset.id);
+        const renderList = (filter = '') => {
+            const query = filter.trim().toLowerCase();
+
+            const items = query
+                ? state.customers.filter((id) => id.toLowerCase().includes(query))
+                : state.customers;
+
+            const visibleItems = items.slice(0, 200);
+
+            list.innerHTML = visibleItems.length
+                ? visibleItems
+                    .map(
+                        (id) =>
+                            `<li data-id="${escapeHtml(id)}">${escapeHtml(id)}</li>`
+                    )
+                    .join('')
+                : '<li class="no-match">No customer found</li>';
+        };
+
+        input.addEventListener('focus', () => {
+            renderList(input.value);
+            list.classList.remove('hidden');
+        });
+
+        input.addEventListener('input', () => {
+            renderList(input.value);
+            list.classList.remove('hidden');
+        });
+
+        input.addEventListener('keydown', async (event) => {
+            if (event.key === 'Enter') {
+                const first = list.querySelector('li[data-id]');
+                if (!first) return;
+
+                list.classList.add('hidden');
+                input.blur();
+                await selectCustomer(first.dataset.id);
+            }
+
+            if (event.key === 'Escape') {
                 list.classList.add('hidden');
                 input.blur();
             }
-        }
-        if (e.key === 'Escape') {
+        });
+
+        list.addEventListener('click', async (event) => {
+            const item = event.target.closest('li[data-id]');
+            if (!item) return;
+
             list.classList.add('hidden');
             input.blur();
-        }
-    });
+            await selectCustomer(item.dataset.id);
+        });
 
-    list.addEventListener('click', (e) => {
-        const li = e.target.closest('li[data-id]');
-        if (!li) return;
-        selectCustomer(li.dataset.id);
-        list.classList.add('hidden');
-        input.blur();
-    });
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('#customer-combobox')) {
+                list.classList.add('hidden');
+            }
+        });
 
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('#customer-combobox')) {
-            list.classList.add('hidden');
-        }
-    });
-
-    input.value = state.customers[0] || '';
+        input.value = state.customers[0] || '';
+    } catch (error) {
+        console.error('Customer list load failed:', error);
+        showCustomerEmpty('Customer list could not be loaded.');
+    }
 }
 
-function selectCustomer(id) {
-    state.currentId = id;
-    $('#customer-search').value = id;
-    fetchCustomer(id);
-}
+async function selectCustomer(id) {
+    const customerId = String(id || '').trim();
+    if (!customerId) return;
 
-// -------------------------------------------------------------
-// Customer payload
-// -------------------------------------------------------------
-async function fetchCustomer(id) {
+    state.currentId = customerId;
+
+    const input = $('#customer-search');
+    if (input) input.value = customerId;
+
+    // Clear the previous chart before loading the new customer's data.
+    clearCustomerHistoryChart();
+    setHistoryLoading();
+
+    const requestSeq = ++state.customerRequestSeq;
+
     try {
-        const r = await fetch(`/api/customer/${encodeURIComponent(id)}`);
-        if (!r.ok) throw new Error('Customer not found');
-        const data = await r.json();
+        const response = await fetch(
+            `/api/customer/${encodeURIComponent(customerId)}`,
+            { cache: 'no-store' }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Customer request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Ignore a slower response from an older selection.
+        if (requestSeq !== state.customerRequestSeq) {
+            return;
+        }
+
+        if (state.currentId !== customerId) {
+            return;
+        }
+
         state.currentPayload = data;
-        renderAll(data);
-    } catch (e) {
-        console.error(e);
+        renderCustomer(data);
+    } catch (error) {
+        if (requestSeq !== state.customerRequestSeq) return;
+
+        console.error('Customer load failed:', error);
+        showCustomerEmpty('Customer data could not be loaded.');
     }
 }
 
-function renderAll(d) {
-    renderHero(d.hero);
-    renderNbc(d.nbc);
-    renderContext(d.context);
-    renderInteraction(d.interaction);
-    renderDecisionSupport(d.predictions, d.signals);
-    renderProfile('#term-profile', d.term_profile);
-    renderProfile('#insurance-profile', d.insurance_profile);
-    renderHistoryTab(d);
-}
 
 // -------------------------------------------------------------
-// Hero
+// Customer rendering
 // -------------------------------------------------------------
-function renderHero(h) {
-    $('#hero-id').textContent = h.id;
-    const chips = [
-        `Score date · ${h.score_date}`,
-        `Channel · ${h.channel}`,
-        `Last action · ${h.last_action_date}`,
-    ];
-    $('#hero-chips').innerHTML = chips.map(c => `<span class="chip">${c}</span>`).join('');
+
+function renderCustomer(data) {
+    renderHero(data.hero);
+    renderNbc(data.nbc);
+    renderActivity(data.activity, data.interaction);
+
+    renderProfileSummary(
+        '#term-profile-summary',
+        data.term_profile,
+        6,
+        'Term deposit profile unavailable'
+    );
+    renderFullProfile('#term-profile-full', data.term_profile);
+
+    renderProfileSummary(
+        '#insurance-profile-summary',
+        data.insurance_profile,
+        6,
+        'Insurance profile unavailable'
+    );
+    renderFullProfile('#insurance-profile-full', data.insurance_profile);
+
+    renderHistory(data.history);
 }
 
-// -------------------------------------------------------------
-// NBC cards
-// -------------------------------------------------------------
+function renderHero(hero) {
+    setText('#hero-id', hero?.id);
+    setText('#hero-score-date', hero?.score_date);
+    setText('#hero-channel', hero?.channel);
+    setText('#hero-last-action-date', hero?.last_action_date);
+}
+
 function renderNbc(nbc) {
-    $('#nbc1-value').textContent = nbc.nbc1;
-    $('#nbc2-value').textContent = nbc.nbc2;
-    $('#nbc3-value').textContent = nbc.nbc3;
+    setText('#nbc1-value', nbc?.nbc1);
+    setText('#nbc2-value', nbc?.nbc2);
+    setText('#nbc3-value', nbc?.nbc3);
 }
 
-// -------------------------------------------------------------
-// Decision support
-// -------------------------------------------------------------
-function renderDecisionSupport(predictions, signals) {
-    applyPrediction('#term-pill', '#term-affinity-text', '#term-affinity-bar', predictions.term);
-    applyPrediction('#ins-pill', '#ins-affinity-text', '#ins-affinity-bar', predictions.insurance);
-    renderSignals(signals);
-}
+function renderActivity(activity, interaction) {
+    setText('#ctx-last-action', activity?.last_action);
+    setText('#ctx-channel', activity?.channel);
+    setText('#ctx-action-date', activity?.action_date);
 
-function applyPrediction(pillSel, textSel, barSel, data) {
-    const pill = $(pillSel);
-    if (!pill || !data) return;
-
-    pill.textContent = data.label;
-    pill.className = 'pred-pill ' + (data.is_yes ? 'pred-yes' : 'pred-no');
-
-    const textEl = $(textSel);
-    const barEl = $(barSel);
-
-    if (textEl) textEl.textContent = data.affinity_display;
-    if (barEl) barEl.style.width = data.affinity_width + '%';
-}
-
-// -------------------------------------------------------------
-// Context strip
-// -------------------------------------------------------------
-function renderContext(ctx) {
-    $('#ctx-last-action').textContent = ctx.last_action;
-    $('#ctx-channel').textContent = ctx.channel;
-    $('#ctx-action-date').textContent = ctx.action_date;
-}
-
-function renderInteraction(interaction) {
     if (!interaction) {
-        $('#interaction-date').textContent = 'Last interaction';
-        $('#interaction-text').textContent = 'No interaction record was found for this customer.';
+        setText('#interaction-date', 'No interaction date');
+        setText(
+            '#interaction-text',
+            'No interaction record was found for this customer.'
+        );
         return;
     }
-    $('#interaction-date').textContent = `Last interaction · ${interaction.date}`;
-    $('#interaction-text').textContent = interaction.text;
+
+    setText('#interaction-date', interaction.date);
+    setText('#interaction-text', interaction.text);
 }
 
-function renderHistoryInsight(ins) {
-    if (!ins) {
-        $('#history-insight').style.display = 'none';
+function renderProfileSummary(selector, rows, limit, emptyText) {
+    const container = $(selector);
+    if (!container) return;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+        container.innerHTML = `
+            <div class="profile-empty-inline">
+                <span>${escapeHtml(emptyText)}</span>
+            </div>
+        `;
         return;
     }
-    $('#history-insight').style.display = '';
-    $('#history-insight-text').textContent =
-        `Most frequent NBC1: ${ins.dominant} · ${ins.dominant_count}/${ins.total} points · ${ins.distinct} distinct states`;
+
+    const selected = rows.slice(0, limit);
+
+    container.innerHTML = selected
+        .map(
+            (row) => `
+                <div class="profile-item">
+                    <span>${escapeHtml(row.field)}</span>
+                    <strong>${escapeHtml(row.value)}</strong>
+                </div>
+            `
+        )
+        .join('');
 }
 
-// -------------------------------------------------------------
-// Signals
-// -------------------------------------------------------------
-function renderSignals(signals) {
-    const html = signals.map(s => `
-        <div class="signal-card">
-            <div class="signal-label">${s.label}</div>
-            <div class="signal-value">${s.value}</div>
-        </div>
-    `).join('');
-    $('#signals-grid').innerHTML = html;
-}
+function renderFullProfile(selector, rows) {
+    const container = $(selector);
+    if (!container) return;
 
-// -------------------------------------------------------------
-// Profile tables
-// -------------------------------------------------------------
-function renderProfile(sel, rows) {
-    const el = $(sel);
-    if (!rows || !rows.length) {
-        el.innerHTML = '<div style="padding:16px;color:#8da3b8;">No fields available for this customer.</div>';
+    if (!Array.isArray(rows) || rows.length === 0) {
+        container.innerHTML = '';
         return;
     }
-    el.innerHTML = `
+
+    container.innerHTML = `
         <table>
-            <thead><tr><th>Field</th><th>Value</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
             <tbody>
-                ${rows.map(r => `<tr><td>${r.field}</td><td>${r.value}</td></tr>`).join('')}
+                ${rows
+                    .map(
+                        (row) => `
+                            <tr>
+                                <td>${escapeHtml(row.field)}</td>
+                                <td>${escapeHtml(row.value)}</td>
+                            </tr>
+                        `
+                    )
+                    .join('')}
             </tbody>
         </table>
     `;
 }
 
+
 // -------------------------------------------------------------
-// History tab
+// Customer history
 // -------------------------------------------------------------
-function renderHistoryTab(d) {
-    const hist = d.history_insight;
 
-    if (!hist) {
-        $('#hs-points').textContent = '—';
-        $('#hs-dominant').textContent = '—';
-        $('#hs-latest').textContent = '—';
+function setHistoryLoading() {
+    setText('#hs-points', 'Loading…');
+    setText('#hs-dominant', 'Loading…');
+    setText('#hs-latest', 'Loading…');
+    setText('#hist-dominant', 'Loading…');
+    setText('#hist-readout', 'Loading customer history…');
+    setText('#current-vs-history', 'Loading…');
 
-        if (typeof Plotly !== 'undefined') {
-            Plotly.purge('chart-customer-distribution');
-        }
+    const table = $('#history-table');
+    if (table) table.innerHTML = '';
 
+    $('#customer-chart-empty')?.classList.add('hidden');
+}
+
+function renderHistory(history) {
+    const chartEmpty = $('#customer-chart-empty');
+
+    if (!history) {
+        setText('#hs-points', '0');
+        setText('#hs-dominant', '—');
+        setText('#hs-latest', '—');
+        setText('#hist-dominant', 'No history');
+        setText('#hist-readout', 'No historical NBC1 records are available.');
+        setText('#current-vs-history', 'No comparison is available.');
+        $('#history-table').innerHTML = '';
+        showChartEmpty(chartEmpty, true);
+        clearCustomerHistoryChart();
         return;
     }
 
-    $('#hs-points').textContent = hist.total;
-    $('#hs-dominant').textContent = hist.dominant;
-    $('#hs-latest').textContent = hist.latest;
+    setText('#history-subtitle', `${history.total} historical points for ${state.currentId}`);
+    setText('#hs-points', history.total);
+    setText('#hs-dominant', history.dominant);
+    setText('#hs-latest', history.latest);
+    setText('#hist-dominant', history.dominant);
 
-    const uniqueStates = Array.from(new Set(hist.points.map(p => p.state)));
-    state.stateColors = {};
+    setText(
+        '#hist-readout',
+        `${history.dominant} appeared in ${history.dominant_count} of ${history.total} historical points.`
+    );
 
-    uniqueStates.forEach((s, i) => {
-        state.stateColors[s] = PALETTE[i % PALETTE.length];
+    setText(
+        '#current-vs-history',
+        history.matches_current
+            ? 'Current NBC1 matches the latest historical NBC1.'
+            : 'Current NBC1 differs from the latest historical NBC1.'
+    );
+
+    renderHistoryTable(history.points);
+    showChartEmpty(chartEmpty, false);
+
+    requestAnimationFrame(() => {
+        renderCustomerDistribution(history);
     });
+}
 
-    renderCustomerDistribution(hist);
+function renderCurrentCustomerHistory() {
+    if (!state.currentPayload?.history) {
+        return;
+    }
 
-    $('#hist-dominant').textContent = hist.dominant;
-    $('#hist-readout').textContent =
-        `${hist.dominant} appeared in ${hist.dominant_count} of ${hist.total} historical points. ` +
-        `The sequence starts at ${hist.first} and the latest historical point is ${hist.latest}.`;
+    requestAnimationFrame(() => {
+        renderCustomerDistribution(state.currentPayload.history);
+    });
+}
 
-    $('#current-vs-history').textContent = hist.matches_current
-        ? 'Current NBC1 matches the latest historical NBC1.'
-        : 'Current NBC1 differs from the latest historical NBC1.';
+function renderHistoryTable(points) {
+    const container = $('#history-table');
+    if (!container) return;
 
-    const tableHtml = `
+    container.innerHTML = `
         <table>
             <thead>
                 <tr>
@@ -320,72 +478,72 @@ function renderHistoryTab(d) {
                 </tr>
             </thead>
             <tbody>
-                ${hist.points.map(p => `
-                    <tr>
-                        <td>${p.point ?? '—'}</td>
-                        <td>${p.date}</td>
-                        <td>${escapeHtml(p.state)}</td>
-                    </tr>
-                `).join('')}
+                ${(points || [])
+                    .map(
+                        (point) => `
+                            <tr>
+                                <td>${escapeHtml(point.point)}</td>
+                                <td>${escapeHtml(point.date)}</td>
+                                <td>${escapeHtml(point.state)}</td>
+                            </tr>
+                        `
+                    )
+                    .join('')}
             </tbody>
         </table>
     `;
-
-    $('#history-table').innerHTML = tableHtml;
-
-    // NOTE: the portfolio chart is intentionally NOT re-rendered here.
-    // It is customer-independent, and this function runs on every single
-    // customer selection — including while the History tab is hidden
-    // (display:none). Calling Plotly.react() into a zero-width hidden
-    // container is what was corrupting the chart; see renderPortfolio()
-    // and the '#main-tabs .tab' click handler for the actual trigger.
 }
 
-function renderCustomerDistribution(hist) {
-    const labels = hist.counts.map(c => c.state);
-    const values = hist.counts.map(c => c.value);
+function renderCustomerDistribution(history) {
+    if (
+        state.workspace !== 'service' ||
+        state.servicePage !== 'customer' ||
+        !history ||
+        !Array.isArray(history.counts)
+    ) {
+        return;
+    }
 
-    const colors = labels.map((label, index) => {
-        if (!state.stateColors[label]) {
-            state.stateColors[label] = PALETTE[index % PALETTE.length];
-        }
-        return state.stateColors[label];
-    });
+    const container = $('#chart-customer-distribution');
+    if (!container || typeof Plotly === 'undefined') {
+        return;
+    }
 
-    const trace = {
-        x: values,
-        y: labels,
-        orientation: 'h',
-        marker: {
-            color: colors,
-            opacity: 0.88,
+    const labels = history.counts.map((item) => item.state);
+    const values = history.counts.map((item) => Number(item.value || 0));
+
+    if (!labels.length) {
+        clearCustomerHistoryChart();
+        return;
+    }
+
+    const traces = [
+        {
+            type: 'bar',
+            orientation: 'h',
+            x: values,
+            y: labels,
+            marker: {
+                color: labels.map((_, index) => PALETTE[index % PALETTE.length]),
+                opacity: 0.9,
+            },
+            hovertemplate: '<b>%{y}</b><br>%{x} of historical points<extra></extra>',
         },
-        hovertemplate:
-            '<b>%{y}</b><br>%{x} of 18 historical points<extra></extra>',
-        type: 'bar',
-    };
+    ];
 
-    const maxValue = Math.max(...values, 0);
+    const maxValue = Math.max(...values, 1);
 
-    const layout = baseLayout({
-        height: Math.max(
-            250,
-            Math.min(360, labels.length * 48 + 75)
-        ),
-        margin: {
-            l: 205,
-            r: 24,
-            t: 10,
-            b: 36,
-        },
+    const layout = chartBaseLayout({
+        height: Math.max(320, Math.min(420, labels.length * 64 + 120)),
+        margin: { l: 210, r: 30, t: 16, b: 50 },
         xaxis: {
             title: null,
+            range: [0, maxValue + 1],
+            dtick: 1,
             showgrid: true,
             gridcolor: 'rgba(141,163,184,0.08)',
             zeroline: false,
-            tickfont: { size: 10 },
-            dtick: 1,
-            range: [0, Math.max(3, maxValue + 1)],
+            tickfont: { size: 10, color: '#8da3b8' },
         },
         yaxis: {
             title: null,
@@ -393,58 +551,68 @@ function renderCustomerDistribution(hist) {
             zeroline: false,
             automargin: true,
             autorange: 'reversed',
-            tickfont: { size: 10 },
+            tickfont: { size: 11, color: '#b9cad9' },
         },
         showlegend: false,
     });
 
-    Plotly.react(
-        'chart-customer-distribution',
-        [trace],
-        layout,
-        {
+    try {
+        Plotly.react(container, traces, layout, {
             displayModeBar: false,
             responsive: true,
-        }
-    );
+        });
+    } catch (error) {
+        console.error('Customer history chart failed:', error);
+    }
 }
 
+function clearCustomerHistoryChart() {
+    const container = $('#chart-customer-distribution');
+    if (!container || typeof Plotly === 'undefined') return;
+
+    try {
+        Plotly.purge(container);
+    } catch (error) {
+        console.warn('Could not clear customer history chart:', error);
+    }
+}
+
+
 // -------------------------------------------------------------
-// Portfolio context — fixed across all customers
+// Portfolio
 // -------------------------------------------------------------
+
 async function loadPortfolio() {
     try {
-        const r = await fetch('/api/portfolio');
+        const response = await fetch('/api/portfolio', { cache: 'no-store' });
 
-        if (!r.ok) {
-            throw new Error(`Portfolio request failed: ${r.status}`);
+        if (!response.ok) {
+            throw new Error(`Portfolio request failed: ${response.status}`);
         }
 
-        const data = await r.json();
-        state.portfolio = data;
+        state.portfolio = await response.json();
 
-        const historyPanel = $('[data-panel="history"]');
-
-        if (
-            historyPanel &&
-            historyPanel.classList.contains('active')
-        ) {
-            renderPortfolio(data);
+        if (state.workspace === 'service' && state.servicePage === 'portfolio') {
+            requestAnimationFrame(() => renderPortfolio(state.portfolio));
         }
-    } catch (e) {
-        console.error('Portfolio load failed:', e);
+    } catch (error) {
+        console.error('Portfolio load failed:', error);
+        showPortfolioError();
     }
 }
 
 function renderPortfolio(data) {
-    const container = document.getElementById('chart-portfolio');
+    if (
+        state.workspace !== 'service' ||
+        state.servicePage !== 'portfolio'
+    ) {
+        return;
+    }
 
-    const showError = () => {
-        if (container) {
-            container.innerHTML =
-                '<div class="chart-empty-state">Portfolio composition could not be loaded.</div>';
-        }
-    };
+    const container = $('#chart-portfolio');
+    if (!container || typeof Plotly === 'undefined') {
+        return;
+    }
 
     if (
         !data ||
@@ -452,77 +620,46 @@ function renderPortfolio(data) {
         !Array.isArray(data.series) ||
         !data.points.length
     ) {
-        console.error('renderPortfolio: malformed /api/portfolio payload', data);
-        showError();
+        showPortfolioError();
         return;
     }
 
-    // Only plot into a container that actually has layout dimensions.
-    // Plotly.react()/newPlot() on a display:none ancestor gets a 0x0 box;
-    // with multi-trace stacked bars + customdata this throws mid-render
-    // and leaves the div in a half-initialized state that every later
-    // Plotly.react() call on the same node keeps throwing on. Bail out
-    // here and let the caller retry once the tab is actually visible.
-    if (!container || container.offsetParent === null) {
-        return;
-    }
+    const xLabels = data.points.map((point) => `P${point}`);
+    const dates = Array.isArray(data.point_dates) ? data.point_dates : [];
 
-    const dates = data.point_dates || [];
-    const labels = dates.length ? dates : data.points.map(point => `P${point}`);
-
-    const portfolioColors = [
+    const colors = [
         '#42d9d0',
         '#6aa6ff',
         '#a78bfa',
         '#f7c873',
         '#ff7c86',
         '#6fe0a9',
-        '#8da3b7',
-        '#dc8cff',
-        '#7dd3fc',
     ];
 
     const traces = data.series.map((series, index) => ({
-        x: labels,
-        y: series.values,
-        name: series.state,
         type: 'bar',
-
+        name: series.state,
+        x: xLabels,
+        y: series.values,
         marker: {
-            color: portfolioColors[
-                index % portfolioColors.length
-            ],
+            color: colors[index % colors.length],
         },
-
-        customdata: series.values.map(
-            (value, pointIndex) => [
-                data.points[pointIndex],
-                dates[pointIndex] || '—',
-                series.state,
-                value,
-            ]
-        ),
-
+        customdata: series.values.map((value, pointIndex) => [
+            xLabels[pointIndex],
+            dates[pointIndex] || '—',
+            value,
+        ]),
         hovertemplate:
-            '<b>%{customdata[2]}</b><br>' +
-            'Point %{customdata[0]} · %{customdata[1]}<br>' +
-            '%{customdata[3]:,} customers<extra></extra>',
+            '<b>%{fullData.name}</b><br>' +
+            '%{customdata[0]} · %{customdata[1]}<br>' +
+            '%{customdata[2]:,} customers<extra></extra>',
     }));
 
-    const layout = baseLayout({
-        height: 430,
-
+    const layout = chartBaseLayout({
+        height: 520,
         barmode: 'stack',
-
-        bargap: 0.28,
-
-        margin: {
-            l: 72,
-            r: 28,
-            t: 66,
-            b: 54,
-        },
-
+        bargap: 0.26,
+        margin: { l: 70, r: 30, t: 70, b: 70 },
         legend: {
             orientation: 'h',
             yanchor: 'bottom',
@@ -531,86 +668,160 @@ function renderPortfolio(data) {
             x: 0,
             font: {
                 size: 10,
-                color: '#a8bbce',
+                color: '#a9bccd',
             },
         },
-
         xaxis: {
-            title: null,
+            title: {
+                text: 'Historical point',
+                font: { size: 11, color: '#8da3b8' },
+            },
             type: 'category',
-            categoryorder: 'array',
-            categoryarray: labels,
             showgrid: false,
             zeroline: false,
+            tickfont: { size: 10, color: '#8da3b8' },
             tickmode: 'array',
-            tickvals: labels,
-            tickangle: -45,
-            ticktext: labels,
-            tickfont: {
-                size: 10,
-                color: '#8da3b8',
-            },
+            tickvals: xLabels,
+            ticktext: xLabels,
         },
-
         yaxis: {
             title: {
                 text: 'Number of customers',
                 standoff: 12,
-                font: {
-                    size: 10,
-                    color: '#8da3b8',
-                },
+                font: { size: 11, color: '#8da3b8' },
             },
             rangemode: 'tozero',
             showgrid: true,
             gridcolor: 'rgba(141,163,184,0.08)',
             zeroline: false,
-            tickfont: {
-                size: 10,
-                color: '#8da3b8',
-            },
+            tickfont: { size: 10, color: '#8da3b8' },
         },
-
         hovermode: 'closest',
     });
 
     try {
-        // Purge first: if an earlier attempt on this same div threw
-        // (e.g. the old hidden-container render), Plotly can be left
-        // with inconsistent internal state that makes every subsequent
-        // Plotly.react() on that node fail too. Purge guarantees a
-        // clean slate before every (re)draw.
-        Plotly.purge(container);
-        Plotly.newPlot(
-            container,
-            traces,
-            layout,
-            {
-                displayModeBar: false,
-                responsive: true,
-            }
-        );
-    } catch (err) {
-        console.error('renderPortfolio: Plotly failed to render', err);
-        showError();
+        Plotly.react(container, traces, layout, {
+            displayModeBar: false,
+            responsive: true,
+        });
+
+        showChartEmpty($('#portfolio-chart-empty'), false);
+    } catch (error) {
+        console.error('Portfolio chart failed:', error);
+        showPortfolioError();
     }
 }
 
+function showPortfolioError() {
+    showChartEmpty($('#portfolio-chart-empty'), true);
+
+    const container = $('#chart-portfolio');
+    if (container && typeof Plotly !== 'undefined') {
+        try {
+            Plotly.purge(container);
+        } catch (error) {
+            console.warn('Could not clear portfolio chart:', error);
+        }
+    }
+}
+
+
 // -------------------------------------------------------------
-// Plotly helpers
+// Chart helpers
 // -------------------------------------------------------------
-function baseLayout(overrides = {}) {
-    return Object.assign({
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#a8bbce', family: 'DM Sans, sans-serif' },
-        hoverlabel: { bgcolor: '#102239', bordercolor: '#28445d', font_size: 11 },
-    }, overrides);
+
+function chartBaseLayout(overrides = {}) {
+    return Object.assign(
+        {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: {
+                family: 'DM Sans, sans-serif',
+                color: '#a8bbce',
+            },
+            hoverlabel: {
+                bgcolor: '#102239',
+                bordercolor: '#28445d',
+                font_size: 11,
+            },
+        },
+        overrides
+    );
+}
+
+function resizeVisibleCharts() {
+    if (typeof Plotly === 'undefined') return;
+
+    ['chart-customer-distribution', 'chart-portfolio'].forEach((id) => {
+        const element = document.getElementById(id);
+
+        if (!element || !element.data) return;
+
+        const visible =
+            element.offsetWidth > 0 &&
+            element.offsetHeight > 0;
+
+        if (!visible) return;
+
+        try {
+            Plotly.Plots.resize(element);
+        } catch (error) {
+            console.warn(`Could not resize ${id}:`, error);
+        }
+    });
 }
 
 window.addEventListener('resize', () => {
-    ['chart-customer-distribution', 'chart-portfolio'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el && el.data) Plotly.Plots.resize(el);
-    });
+    requestAnimationFrame(resizeVisibleCharts);
 });
+
+
+// -------------------------------------------------------------
+// UI helpers
+// -------------------------------------------------------------
+
+function showCustomerEmpty(message) {
+    setText('#hero-id', '—');
+    setText('#hero-score-date', '—');
+    setText('#hero-channel', '—');
+    setText('#hero-last-action-date', '—');
+    setText('#nbc1-value', '—');
+    setText('#nbc2-value', '—');
+    setText('#nbc3-value', '—');
+    setText('#ctx-last-action', message);
+    setText('#interaction-text', '—');
+
+    clearCustomerHistoryChart();
+}
+
+function setStatusMessage(message) {
+    const el = $('#dataset-status');
+    if (el) {
+        el.innerHTML = `<span class="status-chip">${escapeHtml(message)}</span>`;
+    }
+}
+
+function setText(selector, value) {
+    const element = $(selector);
+    if (!element) return;
+
+    const text = value === null || value === undefined || value === ''
+        ? '—'
+        : String(value);
+
+    element.textContent = text;
+}
+
+function showChartEmpty(element, show) {
+    if (!element) return;
+    element.classList.toggle('hidden', !show);
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}

@@ -1,0 +1,23 @@
+NBC Command Center frontend refactor
+
+1. Primary navigation is now only Product / Service.
+2. Removed all nested horizontal tab rows.
+3. Service > Customer Intelligence is now one continuous production-style workspace:
+   - Overview
+   - Customer Context
+   - NBC History
+4. Customer Context shows Term Deposit Profile and Insurance Profile side-by-side,
+   with Decision Support below them.
+5. Portfolio History is a dedicated Service view containing only the static portfolio
+   NBC1 composition chart. It contains no selected-customer visualisation.
+6. Plotly charts are rendered only when their own view is visible.
+7. app.py profile-row logic now includes any available columns matching term_ / motor_
+   prefixes after the documented fields, making the profile API more resilient to
+   additional source attributes.
+
+Install the package contents into the existing Flask project:
+- templates/index.html
+- static/app.js
+- static/style.css
+- replace app.py with the supplied version
+- keep the existing data.py and Data/ directory unchanged
