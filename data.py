@@ -13,8 +13,8 @@ import re
 import pandas as pd
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "Data"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "Banking Datasets - Marketing Targets" / "historic_nbcs"
 
 MAIN_DATA_PATH = DATA_DIR / "main_dataset_scored_20sep2026.csv"
 INTERACTION_DATA_PATH = DATA_DIR / "customer_last_interaction.csv"
