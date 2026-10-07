@@ -1126,3 +1126,148 @@ button {
         min-height: 420px;
     }
 }
+
+/* ==============================================================
+   Product view + customer journey
+   ============================================================== */
+
+.first-section { padding-top: 8px; }
+
+.accent-id { color: var(--cyan-2); }
+
+.product-tiles {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.product-tile {
+    padding: 15px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(13, 27, 45, 0.50);
+    opacity: 0.62;
+}
+
+.product-tile.held {
+    opacity: 1;
+    border-color: rgba(66, 217, 208, 0.26);
+    background: linear-gradient(145deg, rgba(19, 60, 69, 0.90), rgba(10, 34, 48, 0.94));
+}
+
+.product-tile .tile-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.product-tile .tile-status {
+    margin-top: 8px;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-2);
+}
+
+.product-tile.held .tile-status { color: var(--green); }
+
+.product-tile .tile-meta {
+    margin-top: 6px;
+    min-height: 1.1em;
+    color: var(--muted);
+    font-size: 0.68rem;
+}
+
+.product-kpis-3,
+.product-kpis-4 {
+    margin-top: 12px;
+}
+
+.product-kpis-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.product-kpis-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.history-metric small {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted-2);
+    font-size: 0.64rem;
+    line-height: 1.4;
+}
+
+.product-balance-card { margin-top: 12px; }
+
+.product-portfolio-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr);
+    gap: 12px;
+}
+
+.chart-head-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.chart-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.chart-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--muted-2);
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.chart-controls select {
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: rgba(14, 30, 48, 0.90);
+    color: var(--text);
+    font-size: 0.72rem;
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 500;
+}
+
+.chart-note {
+    margin: 6px 4px 0 !important;
+    color: var(--muted-2) !important;
+}
+
+.segmented {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.segmented button {
+    padding: 7px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.segmented button.active {
+    background: rgba(66, 217, 208, 0.12);
+    color: var(--cyan-2);
+}
+
+.journey-section .chart-card { padding-bottom: 8px; }
+
+@media (max-width: 900px) {
+    .product-tiles,
+    .product-kpis-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .product-kpis-3 { grid-template-columns: 1fr; }
+    .product-portfolio-layout { grid-template-columns: 1fr; }
+}

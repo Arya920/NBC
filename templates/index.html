@@ -81,12 +81,97 @@
 
         <!-- Product -->
         <section class="workspace-panel" data-workspace-panel="product">
-            <div class="product-empty">
-                <div class="empty-orb">P</div>
-                <div class="eyebrow">Product workspace</div>
-                <h1>Product intelligence</h1>
-                <p>Reserved for product-led decisioning. No product content is exposed yet.</p>
+            <div class="service-header">
+                <div>
+                    <div class="eyebrow">Product intelligence</div>
+                    <h1>Product holdings</h1>
+                    <p>Customer-level holdings follow the sidebar selection. The portfolio section below is static and never changes with the selected customer.</p>
+                </div>
             </div>
+
+            <!-- Customer-level (follows selector) -->
+            <section class="content-section first-section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-kicker">01 · CUSTOMER-LEVEL</div>
+                        <h2>Holdings for <span class="accent-id" id="prod-customer-id">—</span></h2>
+                    </div>
+                    <div class="section-note">Follows customer selection</div>
+                </div>
+
+                <div class="product-tiles" id="product-tiles"></div>
+
+                <div class="history-metrics product-kpis-3" id="product-customer-kpis">
+                    <div class="history-metric"><span>Products held</span><strong id="pk-count">—</strong><small id="pk-count-sub"></small></div>
+                    <div class="history-metric"><span>Balance maintained</span><strong id="pk-balance">—</strong><small id="pk-balance-sub"></small></div>
+                    <div class="history-metric"><span>Motor insurance premium</span><strong id="pk-premium">—</strong><small id="pk-premium-sub"></small></div>
+                </div>
+
+                <article class="chart-card product-balance-card">
+                    <div class="chart-card-head">
+                        <div>
+                            <div class="chart-kicker">CUSTOMER VS PORTFOLIO</div>
+                            <h3>Balance position</h3>
+                            <p>Shaded band is the portfolio interquartile range (P25–P75); the line is the portfolio median.</p>
+                        </div>
+                    </div>
+                    <div class="chart" id="chart-product-balance" style="min-height:190px"></div>
+                </article>
+            </section>
+
+            <!-- Portfolio-level (static) -->
+            <section class="content-section">
+                <div class="section-header">
+                    <div>
+                        <div class="section-kicker">02 · PORTFOLIO-LEVEL · STATIC</div>
+                        <h2>Portfolio product view</h2>
+                    </div>
+                    <div class="section-note">Independent of customer selection</div>
+                </div>
+
+                <div class="history-metrics product-kpis-4" id="product-portfolio-kpis"></div>
+
+                <div class="product-portfolio-layout">
+                    <article class="chart-card">
+                        <div class="chart-card-head">
+                            <div>
+                                <div class="chart-kicker">PENETRATION</div>
+                                <h3>Customers holding each product</h3>
+                                <p>Share of all customers.</p>
+                            </div>
+                        </div>
+                        <div class="chart" id="chart-product-penetration" style="min-height:260px"></div>
+                    </article>
+
+                    <article class="chart-card">
+                        <div class="chart-card-head chart-head-controls">
+                            <div>
+                                <div class="chart-kicker">BREAKDOWN</div>
+                                <h3>Product metrics by group</h3>
+                            </div>
+                            <div class="chart-controls">
+                                <label>Metric
+                                    <select id="product-metric">
+                                        <option value="balance">Balance (mean vs median)</option>
+                                        <option value="products">Products held per customer</option>
+                                        <option value="premium">Insurance premium (policyholders)</option>
+                                    </select>
+                                </label>
+                                <label>Group by
+                                    <select id="product-dim">
+                                        <option value="age">Age group</option>
+                                        <option value="job">Occupation</option>
+                                        <option value="education">Education</option>
+                                        <option value="marital">Marital status</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="chart" id="chart-product-breakdown" style="min-height:360px"></div>
+                        <p class="chart-note" id="product-breakdown-note"></p>
+                    </article>
+                </div>
+            </section>
         </section>
 
         <!-- Service -->
@@ -179,11 +264,43 @@
                     </div>
                 </section>
 
+                <!-- Customer journey -->
+                <section class="content-section journey-section">
+                    <div class="section-header">
+                        <div>
+                            <div class="section-kicker">02</div>
+                            <h2>Customer journey</h2>
+                        </div>
+                        <div class="section-note" id="journey-subtitle">Checkpoints from acquisition to current recommendation</div>
+                    </div>
+
+                    <article class="chart-card">
+                        <div class="chart-card-head chart-head-controls">
+                            <div>
+                                <div class="chart-kicker">CUSTOMER-LEVEL · TIMELINE</div>
+                                <h3>Journey checkpoints</h3>
+                                <p>Red outline marks a declined event. Hover a checkpoint for full detail.</p>
+                            </div>
+                            <div class="segmented" id="journey-mode" role="group" aria-label="Journey spacing">
+                                <button type="button" class="active" data-mode="even">Even spacing</button>
+                                <button type="button" data-mode="time">Time scale</button>
+                            </div>
+                        </div>
+                        <div class="chart" id="chart-journey" style="min-height:440px"></div>
+                        <div class="chart-empty hidden" id="journey-chart-empty">No journey events are available for this customer.</div>
+                    </article>
+
+                    <details class="source-details history-details">
+                        <summary>View all journey events</summary>
+                        <div class="profile-table" id="journey-table"></div>
+                    </details>
+                </section>
+
                 <!-- Customer context -->
                 <section class="content-section">
                     <div class="section-header">
                         <div>
-                            <div class="section-kicker">02</div>
+                            <div class="section-kicker">03</div>
                             <h2>Customer context</h2>
                         </div>
                         <div class="section-note">Compact source profile view</div>
@@ -230,7 +347,7 @@
                 <section class="content-section history-section">
                     <div class="section-header">
                         <div>
-                            <div class="section-kicker">03</div>
+                            <div class="section-kicker">04</div>
                             <h2>NBC1 history</h2>
                         </div>
                         <div class="section-note" id="history-subtitle">

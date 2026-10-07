@@ -10,6 +10,10 @@ const state = {
     workspace: 'service',
     servicePage: 'customer',
     customerRequestSeq: 0,
+    productPortfolio: null,
+    productDim: 'age',
+    productMetric: 'balance',
+    journeyMode: 'even',
 };
 
 const PALETTE = [
@@ -37,6 +41,7 @@ async function init() {
     await loadMeta();
     await loadCustomers();
     await loadPortfolio();
+    await loadProductPortfolio('age');
 
     if (state.customers.length > 0) {
         await selectCustomer(state.customers[0]);
@@ -64,6 +69,25 @@ function bindNavigation() {
     $('#back-to-customer')?.addEventListener('click', () => {
         setServicePage('customer');
     });
+
+    $('#product-metric')?.addEventListener('change', (event) => {
+        state.productMetric = event.target.value;
+        renderProductBreakdown();
+    });
+
+    $('#product-dim')?.addEventListener('change', async (event) => {
+        await loadProductPortfolio(event.target.value);
+    });
+
+    $$('#journey-mode button').forEach((button) => {
+        button.addEventListener('click', () => {
+            state.journeyMode = button.dataset.mode;
+            $$('#journey-mode button').forEach((b) =>
+                b.classList.toggle('active', b === button)
+            );
+            renderJourney(state.currentPayload?.journey);
+        });
+    });
 }
 
 function setWorkspace(target) {
@@ -87,6 +111,11 @@ function setWorkspace(target) {
 
     if (target === 'service') {
         setServicePage(state.servicePage);
+    } else if (target === 'product') {
+        requestAnimationFrame(() => {
+            renderProductWorkspace();
+            resizeVisibleCharts();
+        });
     }
 }
 
@@ -107,6 +136,7 @@ function setServicePage(target) {
             renderPortfolio(state.portfolio);
         } else if (target === 'customer') {
             renderCurrentCustomerHistory();
+            renderJourney(state.currentPayload?.journey);
         }
 
         resizeVisibleCharts();
@@ -114,10 +144,13 @@ function setServicePage(target) {
 }
 
 function updateCustomerScopeVisibility() {
-    const show = state.workspace === 'service' && state.servicePage === 'customer';
+    const onCustomerPage =
+        state.workspace === 'service' && state.servicePage === 'customer';
+    // The customer picker also drives the customer-level product section.
+    const showPicker = onCustomerPage || state.workspace === 'product';
 
-    $('#customer-navigation-scope')?.classList.toggle('scope-hidden', !show);
-    $('#customer-hero')?.classList.toggle('scope-hidden', !show);
+    $('#customer-navigation-scope')?.classList.toggle('scope-hidden', !showPicker);
+    $('#customer-hero')?.classList.toggle('scope-hidden', !onCustomerPage);
 }
 
 
@@ -238,6 +271,8 @@ async function selectCustomer(id) {
 
     // Clear the previous chart before loading the new customer's data.
     clearCustomerHistoryChart();
+    purgeChart('chart-journey');
+    purgeChart('chart-product-balance');
     setHistoryLoading();
 
     const requestSeq = ++state.customerRequestSeq;
@@ -300,6 +335,8 @@ function renderCustomer(data) {
     renderFullProfile('#insurance-profile-full', data.insurance_profile);
 
     renderHistory(data.history);
+    renderJourney(data.journey);
+    renderProducts(data.products, data.hero?.id);
 }
 
 function renderHero(hero) {
@@ -752,7 +789,14 @@ function chartBaseLayout(overrides = {}) {
 function resizeVisibleCharts() {
     if (typeof Plotly === 'undefined') return;
 
-    ['chart-customer-distribution', 'chart-portfolio'].forEach((id) => {
+    [
+        'chart-customer-distribution',
+        'chart-portfolio',
+        'chart-journey',
+        'chart-product-balance',
+        'chart-product-penetration',
+        'chart-product-breakdown',
+    ].forEach((id) => {
         const element = document.getElementById(id);
 
         if (!element || !element.data) return;
@@ -824,4 +868,468 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+
+// =============================================================
+// Customer journey
+// =============================================================
+
+const STAGE_COLORS = {
+    'Acquisition': '#6aa6ff',
+    'Onboarding': '#7dd3fc',
+    'Cross-Sell / Marketing': '#f7c873',
+    'Product Holding': '#6fe0a9',
+    'Service / Retention': '#a78bfa',
+    'Current State': '#42d9d0',
+};
+
+function purgeChart(id) {
+    const el = document.getElementById(id);
+    if (!el || typeof Plotly === 'undefined') return;
+    try { Plotly.purge(el); } catch (e) { /* nothing to purge */ }
+}
+
+function isElementVisible(el) {
+    return !!el && el.offsetWidth > 0 && el.offsetHeight > 0;
+}
+
+function wrapLabel(text, width = 20) {
+    const words = String(text ?? '').split(/\s+/);
+    const lines = [];
+    let line = '';
+    words.forEach((word) => {
+        if ((line + ' ' + word).trim().length > width && line) {
+            lines.push(line);
+            line = word;
+        } else {
+            line = (line + ' ' + word).trim();
+        }
+    });
+    if (line) lines.push(line);
+    return lines.join('<br>');
+}
+
+function shortEventTitle(title) {
+    return String(title ?? '')
+        .replace('Next Best Comm: ', 'Recommended: ')
+        .replace('Bank Action: ', 'Action: ');
+}
+
+function renderJourney(events) {
+    const container = $('#chart-journey');
+    const empty = $('#journey-chart-empty');
+    if (!container || typeof Plotly === 'undefined') return;
+
+    renderJourneyTable(events);
+
+    if (!Array.isArray(events) || events.length === 0) {
+        showChartEmpty(empty, true);
+        purgeChart('chart-journey');
+        setText('#journey-subtitle', 'No journey events available');
+        return;
+    }
+    showChartEmpty(empty, false);
+
+    setText(
+        '#journey-subtitle',
+        `${events.length} checkpoints · ${events[0].date} → ${events[events.length - 1].date}`
+    );
+
+    // Plotly needs a laid-out container; re-rendered when the page is shown.
+    if (state.workspace !== 'service' || state.servicePage !== 'customer') return;
+    if (!isElementVisible(container)) return;
+
+    const timeScale = state.journeyMode === 'time';
+    const DAY = 86400000;
+
+    // Same-day events are nudged apart on the time scale so they stay clickable.
+    const seen = {};
+    const xs = events.map((event, index) => {
+        if (!timeScale) return index + 1;
+        const t = Date.parse(event.iso);
+        const k = seen[event.iso] || 0;
+        seen[event.iso] = k + 1;
+        return new Date(t + k * 2 * DAY).toISOString().slice(0, 10);
+    });
+
+    // Alternate above/below, two heights per side, so labels do not collide.
+    const levels = events.map((_, i) => {
+        const up = i % 2 === 0;
+        const tier = (Math.floor(i / 2) % 2) + 1;
+        return up ? tier : -tier;
+    });
+
+    const shapes = events.map((_, i) => ({
+        type: 'line',
+        x0: xs[i], x1: xs[i], y0: 0, y1: levels[i],
+        line: { color: 'rgba(141,163,184,0.28)', width: 1 },
+        layer: 'below',
+    }));
+
+    let xRange;
+    if (timeScale) {
+        const times = events.map((e) => Date.parse(e.iso));
+        const lo = Math.min(...times);
+        const hi = Math.max(...times) + 4 * DAY;
+        const pad = Math.max((hi - lo) * 0.06, 20 * DAY);
+        xRange = [new Date(lo - pad).toISOString(), new Date(hi + pad).toISOString()];
+    } else {
+        xRange = [0.2, events.length + 0.8];
+    }
+
+    shapes.push({
+        type: 'line',
+        xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0,
+        line: { color: 'rgba(141,163,184,0.55)', width: 2 },
+        layer: 'below',
+    });
+
+    const stages = Object.keys(STAGE_COLORS).filter((stage) =>
+        events.some((e) => e.stage === stage)
+    );
+    const extraStages = [...new Set(events.map((e) => e.stage))].filter(
+        (stage) => !(stage in STAGE_COLORS)
+    );
+
+    const markerTraces = [...stages, ...extraStages].map((stage) => {
+        const idx = events.map((e, i) => (e.stage === stage ? i : -1)).filter((i) => i >= 0);
+        const isCurrent = stage === 'Current State';
+        return {
+            type: 'scatter',
+            mode: 'markers',
+            name: stage,
+            x: idx.map((i) => xs[i]),
+            y: idx.map(() => 0),
+            marker: {
+                size: isCurrent ? 19 : 14,
+                symbol: isCurrent ? 'diamond' : 'circle',
+                color: STAGE_COLORS[stage] || '#8da3b8',
+                line: {
+                    width: 2.5,
+                    color: idx.map((i) =>
+                        events[i].status === 'Declined' ? '#ff7c86' : '#07111f'
+                    ),
+                },
+            },
+            customdata: idx.map((i) => {
+                const e = events[i];
+                return [e.seq, e.date, e.title, e.channel, e.status, e.product, wrapLabel(e.description, 60)];
+            }),
+            hovertemplate:
+                '<b>#%{customdata[0]} · %{customdata[2]}</b><br>' +
+                '%{customdata[1]} · %{customdata[5]}<br>' +
+                'Channel: %{customdata[3]} · Status: %{customdata[4]}<br>' +
+                '%{customdata[6]}<extra></extra>',
+        };
+    });
+
+    const labelTrace = {
+        type: 'scatter',
+        mode: 'text',
+        x: xs,
+        y: levels,
+        text: events.map((e) => `<b>${wrapLabel(shortEventTitle(e.title), 20)}</b><br>${e.date}`),
+        textposition: levels.map((l) => (l > 0 ? 'top center' : 'bottom center')),
+        textfont: { size: 10, color: '#c9d8e5' },
+        hoverinfo: 'skip',
+        showlegend: false,
+        cliponaxis: false,
+    };
+
+    const layout = chartBaseLayout({
+        height: 440,
+        margin: { l: 24, r: 24, t: 10, b: 52 },
+        shapes,
+        showlegend: true,
+        legend: {
+            orientation: 'h', yanchor: 'top', y: -0.02, xanchor: 'center', x: 0.5,
+            font: { size: 10, color: '#a9bccd' },
+        },
+        xaxis: Object.assign(
+            {
+                range: xRange,
+                showgrid: false,
+                zeroline: false,
+                fixedrange: true,
+            },
+            timeScale
+                ? { type: 'date', tickformat: '%b %Y', tickfont: { size: 10, color: '#8da3b8' }, side: 'bottom' }
+                : { showticklabels: false }
+        ),
+        yaxis: { range: [-3.1, 3.1], visible: false, fixedrange: true },
+        hovermode: 'closest',
+    });
+
+    try {
+        Plotly.react(container, [labelTrace, ...markerTraces], layout, {
+            displayModeBar: false,
+            responsive: true,
+        });
+    } catch (error) {
+        console.error('Journey chart failed:', error);
+    }
+}
+
+function renderJourneyTable(events) {
+    const container = $('#journey-table');
+    if (!container) return;
+    if (!Array.isArray(events) || !events.length) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = `
+        <table>
+            <thead><tr>
+                <th>#</th><th>Date</th><th>Stage</th><th>Event</th>
+                <th>Product</th><th>Channel</th><th>Status</th>
+            </tr></thead>
+            <tbody>
+                ${events.map((e) => `
+                    <tr title="${escapeHtml(e.description)}">
+                        <td>${escapeHtml(e.seq)}</td>
+                        <td>${escapeHtml(e.date)}</td>
+                        <td>${escapeHtml(e.stage)}</td>
+                        <td>${escapeHtml(e.title)}</td>
+                        <td>${escapeHtml(e.product)}</td>
+                        <td>${escapeHtml(e.channel)}</td>
+                        <td>${escapeHtml(e.status)}</td>
+                    </tr>`).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+
+// =============================================================
+// Product view
+// =============================================================
+
+function formatNumber(value) {
+    return value === null || value === undefined
+        ? '—'
+        : Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function ordinal(n) {
+    const v = n % 100;
+    const suffix = ['th', 'st', 'nd', 'rd'];
+    return n + (suffix[(v - 20) % 10] || suffix[v] || suffix[0]);
+}
+
+function renderProductWorkspace() {
+    if (state.workspace !== 'product') return;
+    renderProducts(state.currentPayload?.products, state.currentPayload?.hero?.id);
+    renderProductPortfolio();
+}
+
+function renderProducts(products, customerId) {
+    setText('#prod-customer-id', customerId || state.currentId);
+
+    const tiles = $('#product-tiles');
+    if (!tiles) return;
+
+    if (!products) {
+        tiles.innerHTML = '<div class="profile-empty-inline">Product data unavailable for this customer.</div>';
+        setText('#pk-count', '—');
+        setText('#pk-balance', '—');
+        setText('#pk-premium', '—');
+        purgeChart('chart-product-balance');
+        return;
+    }
+
+    tiles.innerHTML = products.held.map((item) => {
+        let meta = item.held ? (item.date ? `Recorded ${item.date}` : 'Held') : 'No holding on record';
+        if (item.held && item.key === 'motor_insurance' && products.premium !== null) {
+            meta += ` · premium ${formatNumber(products.premium)}`;
+        }
+        return `
+            <div class="product-tile ${item.held ? 'held' : ''}">
+                <div class="tile-label">${escapeHtml(item.label)}</div>
+                <div class="tile-status">${item.held ? 'Held' : 'Not held'}</div>
+                <div class="tile-meta">${escapeHtml(meta)}</div>
+            </div>`;
+    }).join('');
+
+    setText('#pk-count', `${products.count} of ${products.max}`);
+    setText('#pk-count-sub', 'Excludes the base current account every customer holds.');
+
+    setText('#pk-balance', formatNumber(products.balance));
+    setText(
+        '#pk-balance-sub',
+        products.balance_percentile === null
+            ? ''
+            : `${ordinal(products.balance_percentile)} percentile · portfolio median ${formatNumber(products.ref.median)}`
+    );
+
+    if (products.premium !== null) {
+        setText('#pk-premium', formatNumber(products.premium));
+        setText('#pk-premium-sub', `Policyholder median ${formatNumber(products.ref.premium_median)}`);
+    } else {
+        setText('#pk-premium', '—');
+        setText('#pk-premium-sub', 'No active motor policy.');
+    }
+
+    if (state.workspace === 'product') {
+        requestAnimationFrame(() => renderBalancePosition(products));
+    }
+}
+
+function renderBalancePosition(products) {
+    const container = $('#chart-product-balance');
+    if (!container || typeof Plotly === 'undefined' || !products) return;
+    if (!isElementVisible(container) || products.balance === null) return;
+
+    const r = products.ref;
+    const b = products.balance;
+    const lo = Math.min(r.p5, b);
+    const hi = Math.max(r.p95, b);
+    const pad = (hi - lo) * 0.08 || 50;
+
+    const layout = chartBaseLayout({
+        height: 190,
+        margin: { l: 24, r: 24, t: 24, b: 40 },
+        shapes: [
+            { type: 'line', x0: r.p5, x1: r.p95, y0: 0.5, y1: 0.5, line: { color: 'rgba(141,163,184,0.35)', width: 2 } },
+            { type: 'rect', x0: r.p25, x1: r.p75, y0: 0.32, y1: 0.68, fillcolor: 'rgba(106,166,255,0.22)', line: { width: 0 } },
+            { type: 'line', x0: r.median, x1: r.median, y0: 0.24, y1: 0.76, line: { color: '#6aa6ff', width: 2 } },
+        ],
+        annotations: [
+            { x: r.median, y: 0.8, text: `median ${formatNumber(r.median)}`, showarrow: false, font: { size: 10, color: '#8da3b8' } },
+        ],
+        xaxis: {
+            range: [lo - pad, hi + pad],
+            showgrid: true, gridcolor: 'rgba(141,163,184,0.08)', zeroline: false,
+            tickfont: { size: 10, color: '#8da3b8' },
+            title: { text: 'Balance (P5–P95 whisker)', font: { size: 10, color: '#667e96' } },
+        },
+        yaxis: { range: [0, 1], visible: false, fixedrange: true },
+        showlegend: false,
+    });
+
+    Plotly.react(container, [{
+        type: 'scatter', mode: 'markers', x: [b], y: [0.5],
+        marker: { symbol: 'diamond', size: 16, color: '#42d9d0', line: { width: 2, color: '#07111f' } },
+        hovertemplate: `Customer balance: ${formatNumber(b)}<extra></extra>`,
+    }], layout, { displayModeBar: false, responsive: true });
+}
+
+async function loadProductPortfolio(dim) {
+    try {
+        const response = await fetch(
+            `/api/product-portfolio?dim=${encodeURIComponent(dim)}`,
+            { cache: 'no-store' }
+        );
+        if (!response.ok) throw new Error(`Product portfolio request failed: ${response.status}`);
+        state.productPortfolio = await response.json();
+        state.productDim = state.productPortfolio.dimension;
+        const select = $('#product-dim');
+        if (select) select.value = state.productDim;
+        if (state.workspace === 'product') {
+            requestAnimationFrame(renderProductPortfolio);
+        }
+    } catch (error) {
+        console.error('Product portfolio load failed:', error);
+    }
+}
+
+function renderProductPortfolio() {
+    const data = state.productPortfolio;
+    if (!data || state.workspace !== 'product') return;
+
+    const k = data.kpis;
+    const kpis = $('#product-portfolio-kpis');
+    if (kpis) {
+        kpis.innerHTML = `
+            <div class="history-metric"><span>Customers</span><strong>${formatNumber(k.customers)}</strong><small>${formatNumber(k.motor_holders)} hold motor insurance</small></div>
+            <div class="history-metric"><span>Products per customer</span><strong>${k.products_mean}</strong><small>Of 4 tracked products</small></div>
+            <div class="history-metric"><span>Hold no product</span><strong>${k.no_product_pct}%</strong><small>Cross-sell headroom</small></div>
+            <div class="history-metric"><span>Median balance</span><strong>${formatNumber(k.balance_median)}</strong><small>Mean ${formatNumber(k.balance_mean)} · ${k.negative_balance} negative</small></div>`;
+    }
+
+    const pen = $('#chart-product-penetration');
+    if (pen && typeof Plotly !== 'undefined' && isElementVisible(pen)) {
+        const items = data.penetration;
+        Plotly.react(pen, [{
+            type: 'bar', orientation: 'h',
+            x: items.map((i) => i.pct),
+            y: items.map((i) => i.label),
+            text: items.map((i) => `${i.pct}% · ${formatNumber(i.customers)}`),
+            textposition: 'outside', cliponaxis: false,
+            marker: { color: items.map((_, i) => PALETTE[i % PALETTE.length]), opacity: 0.9 },
+            hovertemplate: '<b>%{y}</b><br>%{text}<extra></extra>',
+        }], chartBaseLayout({
+            height: 260,
+            margin: { l: 110, r: 70, t: 10, b: 40 },
+            xaxis: { range: [0, 100], ticksuffix: '%', showgrid: true, gridcolor: 'rgba(141,163,184,0.08)', zeroline: false, tickfont: { size: 10, color: '#8da3b8' } },
+            yaxis: { autorange: 'reversed', automargin: true, tickfont: { size: 11, color: '#b9cad9' } },
+            showlegend: false,
+        }), { displayModeBar: false, responsive: true });
+    }
+
+    renderProductBreakdown();
+}
+
+function renderProductBreakdown() {
+    const data = state.productPortfolio;
+    const el = $('#chart-product-breakdown');
+    if (!data || !el || typeof Plotly === 'undefined' || state.workspace !== 'product') return;
+    if (!isElementVisible(el)) return;
+
+    const metric = state.productMetric;
+    const rows = data.rows;
+    const FADE = 0.3;
+
+    let bar, median = null, yTitle, note, lowFlags, counts;
+    if (metric === 'products') {
+        bar = rows.map((r) => r.products_mean);
+        yTitle = 'Products held per customer';
+        lowFlags = rows.map((r) => r.low_n);
+        counts = rows.map((r) => r.n);
+        note = `Mean of 4 tracked products. Faded bars have fewer than ${data.min_group_n} customers.`;
+    } else if (metric === 'premium') {
+        bar = rows.map((r) => r.premium_mean);
+        median = rows.map((r) => r.premium_median);
+        yTitle = 'Annual premium';
+        lowFlags = rows.map((r) => r.premium_low_n);
+        counts = rows.map((r) => r.premium_n);
+        note = 'Policyholders only (n shown under each label). Faded bars have fewer than 10 policyholders. Bars = mean, ◆ = median.';
+    } else {
+        bar = rows.map((r) => r.balance_mean);
+        median = rows.map((r) => r.balance_median);
+        yTitle = 'Balance';
+        lowFlags = rows.map((r) => r.low_n);
+        counts = rows.map((r) => r.n);
+        note = `Bars = mean, ◆ = median. A mean far above its median means a few large balances are driving it. Faded bars have fewer than ${data.min_group_n} customers.`;
+    }
+
+    const labels = rows.map((r, i) => `${r.group}<br>n=${counts[i]}`);
+    const traces = [{
+        type: 'bar', name: 'Mean', x: labels, y: bar,
+        marker: { color: '#42d9d0', opacity: lowFlags.map((low) => (low ? FADE : 0.9)) },
+        hovertemplate: '<b>%{x}</b><br>Mean: %{y:,.2f}<extra></extra>',
+    }];
+    if (median) {
+        traces.push({
+            type: 'scatter', mode: 'markers', name: 'Median', x: labels, y: median,
+            marker: { symbol: 'diamond', size: 11, color: '#f7c873', line: { width: 1.5, color: '#07111f' } },
+            hovertemplate: '<b>%{x}</b><br>Median: %{y:,.0f}<extra></extra>',
+        });
+    }
+
+    Plotly.react(el, traces, chartBaseLayout({
+        height: 360,
+        margin: { l: 64, r: 20, t: 20, b: 80 },
+        showlegend: !!median,
+        legend: { orientation: 'h', x: 0, y: 1.1, font: { size: 10, color: '#a9bccd' } },
+        xaxis: { type: 'category', tickfont: { size: 10, color: '#8da3b8' }, automargin: true },
+        yaxis: {
+            title: { text: yTitle, standoff: 8, font: { size: 11, color: '#8da3b8' } },
+            rangemode: 'tozero', showgrid: true, gridcolor: 'rgba(141,163,184,0.08)', zeroline: false,
+            tickfont: { size: 10, color: '#8da3b8' },
+        },
+        bargap: 0.3,
+    }), { displayModeBar: false, responsive: true });
+
+    setText('#product-breakdown-note', note);
 }

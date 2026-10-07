@@ -10,7 +10,7 @@ import math
 from datetime import datetime
 
 import pandas as pd
-from flask import Flask, abort, jsonify, render_template
+from flask import Flask, abort, jsonify, render_template, request
 
 from data import (
     INSURANCE_PROFILE_COLS,
@@ -84,6 +84,37 @@ def build_profile(rows: list[dict], prefix: str) -> list[dict]:
         }
         for row in rows
     ]
+
+
+def build_journey(cid: str) -> list[dict]:
+    journey = store.get_journey(cid)
+    events = []
+    for _, row in journey.iterrows():
+        date = row["event_date"]
+        events.append(
+            {
+                "seq": int(row["checkpoint_seq"]),
+                "date": short_date(date),
+                "iso": date.strftime("%Y-%m-%d") if pd.notna(date) else None,
+                "stage": safe_value(row["event_stage"]),
+                "type": safe_value(row["event_type"]),
+                "title": safe_value(row["event_title"]),
+                "description": safe_value(row["event_description"]),
+                "product": safe_value(row["product"]),
+                "channel": safe_value(row["channel"]),
+                "status": safe_value(row["status"]),
+            }
+        )
+    return events
+
+
+def build_products(cid: str) -> dict | None:
+    products = store.get_customer_products(cid)
+    if products is None:
+        return None
+    for item in products["held"]:
+        item["date"] = short_date(item["date"]) if item["date"] is not None else None
+    return products
 
 
 @app.route("/")
@@ -204,8 +235,16 @@ def api_customer(cid: str):
                 "motor_",
             ),
             "history": history_payload,
+            "products": build_products(cid),
+            "journey": build_journey(cid),
         }
     )
+
+
+@app.route("/api/product-portfolio")
+def api_product_portfolio():
+    """Static, customer-independent product analytics."""
+    return jsonify(store.portfolio_products(request.args.get("dim", "age")))
 
 
 @app.route("/api/portfolio")

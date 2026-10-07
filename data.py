@@ -12,13 +12,20 @@ import re
 
 import pandas as pd
 
+not_an_important_flag = "mypc" # keeping this flag just for my convenience. You can ignore it for now, as mostly you are running it on VM so keep it `vm` in that case
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "Banking Datasets - Marketing Targets" / "historic_nbcs"
+if not_an_important_flag == "vm":
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    DATA_DIR = BASE_DIR / "Banking Datasets - Marketing Targets" / "historic_nbcs"
+
+elif not_an_important_flag == "mypc":
+    BASE_DIR = Path(__file__).resolve().parent
+    DATA_DIR = BASE_DIR / "Data"
 
 MAIN_DATA_PATH = DATA_DIR / "main_dataset_scored_20sep2026.csv"
 INTERACTION_DATA_PATH = DATA_DIR / "customer_last_interaction.csv"
 HISTORY_DATA_PATH = DATA_DIR / "nbc1_historic_18points_long.csv"
+JOURNEY_DATA_PATH = DATA_DIR / "customer_journey_timeline.csv"
 
 
 MAIN_REQUIRED = [
@@ -43,6 +50,42 @@ HISTORY_REQUIRED = [
     "nbc_date",
     "NBC1",
 ]
+
+JOURNEY_REQUIRED = [
+    "synthetic_link_id",
+    "checkpoint_seq",
+    "event_date",
+    "event_stage",
+    "event_type",
+    "event_title",
+    "event_description",
+    "product",
+    "channel",
+    "status",
+]
+
+# Holdings are derived from the main file flags. The journey file's
+# "Product Holding" events were verified to agree with these flags 1:1.
+PRODUCTS = [
+    # key, label, journey event_type carrying the "since" date
+    ("term_deposit", "Term Deposit", "TD_SUBSCRIBED"),
+    ("housing_loan", "Housing Loan", "HOUSING_LOAN_ACTIVE"),
+    ("personal_loan", "Personal Loan", "PERSONAL_LOAN_ACTIVE"),
+    ("motor_insurance", "Motor Insurance", "MOTOR_INSURANCE_CROSSSOLD"),
+]
+HOLDING_SOURCE_COLS = ["term_y", "term_housing", "term_loan", "motor_Response"]
+
+AGE_BINS = [0, 24, 34, 44, 54, 64, 200]
+AGE_LABELS = ["<25", "25-34", "35-44", "45-54", "55-64", "65+"]
+MIN_GROUP_N = 30  # below this a group mean is flagged as unstable
+MIN_PREMIUM_N = 10  # premium is only defined for policyholders (small cells)
+
+PORTFOLIO_DIMENSIONS = {
+    "age": "Age group",
+    "job": "Occupation",
+    "education": "Education",
+    "marital": "Marital status",
+}
 
 TERM_PROFILE_COLS = [
     "term_age",
@@ -131,6 +174,18 @@ def _parse_day_first_date_series(series: pd.Series) -> pd.Series:
     )
 
 
+def _num(value, digits: int = 1):
+    """JSON-safe number: NaN/None -> None (jsonify would emit invalid NaN)."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        return None
+    return round(float(value), digits)
+
+
 def _normalise_id(series: pd.Series) -> pd.Series:
     return series.astype("string").str.strip()
 
@@ -168,6 +223,9 @@ class DataStore:
         if not HISTORY_DATA_PATH.exists():
             raise FileNotFoundError(f"Missing {HISTORY_DATA_PATH}")
 
+        if not JOURNEY_DATA_PATH.exists():
+            raise FileNotFoundError(f"Missing {JOURNEY_DATA_PATH}")
+
         self.main = _clean_columns(pd.read_csv(MAIN_DATA_PATH, skipinitialspace=True))
         self.interactions = _clean_columns(
             pd.read_csv(INTERACTION_DATA_PATH, skipinitialspace=True)
@@ -176,7 +234,12 @@ class DataStore:
             pd.read_csv(HISTORY_DATA_PATH, skipinitialspace=True)
         )
 
-        _require(self.main, MAIN_REQUIRED, MAIN_DATA_PATH.name)
+        self.journey = _clean_columns(
+            pd.read_csv(JOURNEY_DATA_PATH, skipinitialspace=True)
+        )
+
+        _require(self.main, MAIN_REQUIRED + HOLDING_SOURCE_COLS, MAIN_DATA_PATH.name)
+        _require(self.journey, JOURNEY_REQUIRED, JOURNEY_DATA_PATH.name)
         _require(self.interactions, INTERACTION_REQUIRED, INTERACTION_DATA_PATH.name)
         _require(self.history, HISTORY_REQUIRED, HISTORY_DATA_PATH.name)
 
@@ -188,6 +251,20 @@ class DataStore:
         )
         self.history["synthetic_link_id"] = _normalise_id(
             self.history["synthetic_link_id"]
+        )
+
+        # The journey file is space-padded in headers and values.
+        for col in self.journey.columns:
+            if pd.api.types.is_string_dtype(self.journey[col]) or self.journey[col].dtype == object:
+                self.journey[col] = self.journey[col].astype("string").str.strip()
+        self.journey["synthetic_link_id"] = _normalise_id(
+            self.journey["synthetic_link_id"]
+        )
+        self.journey["event_date"] = _parse_day_first_date_series(
+            self.journey["event_date"]
+        )
+        self.journey["checkpoint_seq"] = pd.to_numeric(
+            self.journey["checkpoint_seq"], errors="coerce"
         )
 
         self.main["nbc_score_date"] = _parse_day_first_date_series(
@@ -211,6 +288,166 @@ class DataStore:
             "synthetic_link_id",
             drop=False,
         )
+
+        self._enriched = self._build_enriched()
+        self._portfolio_product_cache: dict[str, dict] = {}
+
+    # ----------------------------------------------------------
+    # Product holdings
+    # ----------------------------------------------------------
+    def _build_enriched(self) -> pd.DataFrame:
+        """Main frame + boolean holding flags + products_held + age band."""
+        df = self.main.drop_duplicates("synthetic_link_id").copy()
+
+        def yes(col: str) -> pd.Series:
+            return df[col].astype("string").str.strip().str.lower().eq("yes").fillna(False)
+
+        df["has_term_deposit"] = yes("term_y")
+        df["has_housing_loan"] = yes("term_housing")
+        df["has_personal_loan"] = yes("term_loan")
+        df["has_motor_insurance"] = (
+            pd.to_numeric(df["motor_Response"], errors="coerce").fillna(0).eq(1)
+        )
+        df["products_held"] = df[[f"has_{k}" for k, _, _ in PRODUCTS]].sum(axis=1)
+
+        df["term_balance"] = pd.to_numeric(df["term_balance"], errors="coerce")
+        df["motor_Annual_Premium"] = pd.to_numeric(
+            df["motor_Annual_Premium"], errors="coerce"
+        )
+        df["age_group"] = pd.cut(
+            pd.to_numeric(df["term_age"], errors="coerce"),
+            bins=AGE_BINS,
+            labels=AGE_LABELS,
+        ).astype("string")
+        return df.set_index("synthetic_link_id", drop=False)
+
+    def get_journey(self, cid: str) -> pd.DataFrame:
+        rows = self.journey.loc[self.journey["synthetic_link_id"] == cid]
+        return rows.sort_values(["checkpoint_seq", "event_date"])
+
+    def get_customer_products(self, cid: str) -> dict | None:
+        if cid not in self._enriched.index:
+            return None
+        row = self._enriched.loc[cid]
+        journey = self.get_journey(cid)
+
+        def since(event_type: str):
+            hit = journey.loc[journey["event_type"] == event_type, "event_date"]
+            return hit.iloc[0] if not hit.empty else None
+
+        held = []
+        for key, label, event_type in PRODUCTS:
+            is_held = bool(row[f"has_{key}"])
+            held.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "held": is_held,
+                    "date": since(event_type) if is_held else None,
+                }
+            )
+
+        balances = self._enriched["term_balance"].dropna()
+        balance = row["term_balance"]
+        pct = None
+        if pd.notna(balance) and len(balances):
+            pct = round(float((balances <= balance).mean() * 100))
+
+        premium = (
+            row["motor_Annual_Premium"] if bool(row["has_motor_insurance"]) else None
+        )
+        holders = self._enriched.loc[
+            self._enriched["has_motor_insurance"], "motor_Annual_Premium"
+        ].dropna()
+
+        return {
+            "held": held,
+            "count": int(row["products_held"]),
+            "max": len(PRODUCTS),
+            "balance": _num(balance, 0),
+            "balance_percentile": pct,
+            "premium": _num(premium, 0),
+            "ref": {
+                "p5": _num(balances.quantile(0.05), 0),
+                "p25": _num(balances.quantile(0.25), 0),
+                "median": _num(balances.median(), 0),
+                "p75": _num(balances.quantile(0.75), 0),
+                "p95": _num(balances.quantile(0.95), 0),
+                "premium_median": _num(holders.median(), 0),
+            },
+        }
+
+    def portfolio_products(self, dim: str = "age") -> dict:
+        """Static portfolio view: independent of the selected customer."""
+        if dim not in PORTFOLIO_DIMENSIONS:
+            dim = "age"
+        if dim in self._portfolio_product_cache:
+            return self._portfolio_product_cache[dim]
+
+        df = self._enriched
+        group_col = {
+            "age": "age_group",
+            "job": "term_job",
+            "education": "term_education",
+            "marital": "term_marital",
+        }[dim]
+
+        rows = []
+        for name, g in df.groupby(group_col, dropna=False, observed=True):
+            holders = g.loc[g["has_motor_insurance"], "motor_Annual_Premium"].dropna()
+            rows.append(
+                {
+                    "group": "Unknown" if pd.isna(name) else str(name),
+                    "n": int(len(g)),
+                    "low_n": bool(len(g) < MIN_GROUP_N),
+                    "balance_mean": _num(g["term_balance"].mean(), 0),
+                    "balance_median": _num(g["term_balance"].median(), 0),
+                    "products_mean": _num(g["products_held"].mean(), 2),
+                    "premium_n": int(len(holders)),
+                    "premium_low_n": bool(len(holders) < MIN_PREMIUM_N),
+                    "premium_mean": _num(holders.mean(), 0),
+                    "premium_median": _num(holders.median(), 0),
+                }
+            )
+
+        if dim == "age":
+            order = {label: i for i, label in enumerate(AGE_LABELS)}
+            rows.sort(key=lambda r: order.get(r["group"], 99))
+        else:
+            rows.sort(key=lambda r: -r["n"])
+
+        total = len(df)
+        penetration = [
+            {
+                "key": key,
+                "label": label,
+                "customers": int(df[f"has_{key}"].sum()),
+                "pct": _num(df[f"has_{key}"].mean() * 100, 1),
+            }
+            for key, label, _ in PRODUCTS
+        ]
+
+        result = {
+            "dimension": dim,
+            "dimension_label": PORTFOLIO_DIMENSIONS[dim],
+            "dimensions": [
+                {"key": k, "label": v} for k, v in PORTFOLIO_DIMENSIONS.items()
+            ],
+            "min_group_n": MIN_GROUP_N,
+            "rows": rows,
+            "penetration": penetration,
+            "kpis": {
+                "customers": int(total),
+                "products_mean": _num(df["products_held"].mean(), 2),
+                "no_product_pct": _num((df["products_held"] == 0).mean() * 100, 1),
+                "balance_mean": _num(df["term_balance"].mean(), 0),
+                "balance_median": _num(df["term_balance"].median(), 0),
+                "negative_balance": int((df["term_balance"] < 0).sum()),
+                "motor_holders": int(df["has_motor_insurance"].sum()),
+            },
+        }
+        self._portfolio_product_cache[dim] = result
+        return result
 
     def customer_ids(self) -> list[str]:
         return sorted(
