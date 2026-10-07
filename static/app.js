@@ -16,17 +16,19 @@ const state = {
     journeyMode: 'even',
 };
 
-const PALETTE = [
-    '#42d9d0',
-    '#6aa6ff',
-    '#a78bfa',
-    '#f7c873',
-    '#ff7c86',
-    '#6fe0a9',
-    '#8da3b8',
-    '#dc8cff',
-    '#7dd3fc',
+// Categorical palette: distinct hue AND lightness, colour-blind tolerant.
+// Red is reserved for negative/declined states and never used as a category.
+const CAT = [
+    '#1D4ED8', // blue
+    '#EA7A00', // orange
+    '#0E9F6E', // green
+    '#7E3AF2', // violet
+    '#BE185D', // magenta
+    '#0891B2', // cyan
+    '#64748B', // slate
+    '#92400E', // brown
 ];
+const UI = { primary: '#1D4ED8', accent: '#EA7A00', negative: '#DC2626', ink: '#0F172A' };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -561,8 +563,7 @@ function renderCustomerDistribution(history) {
             x: values,
             y: labels,
             marker: {
-                color: labels.map((_, index) => PALETTE[index % PALETTE.length]),
-                opacity: 0.9,
+                color: UI.primary,
             },
             hovertemplate: '<b>%{y}</b><br>%{x} of historical points<extra></extra>',
         },
@@ -578,9 +579,9 @@ function renderCustomerDistribution(history) {
             range: [0, maxValue + 1],
             dtick: 1,
             showgrid: true,
-            gridcolor: 'rgba(141,163,184,0.08)',
+            gridcolor: 'rgba(100,116,139,0.18)',
             zeroline: false,
-            tickfont: { size: 10, color: '#8da3b8' },
+            tickfont: { size: 10, color: '#475569' },
         },
         yaxis: {
             title: null,
@@ -588,7 +589,7 @@ function renderCustomerDistribution(history) {
             zeroline: false,
             automargin: true,
             autorange: 'reversed',
-            tickfont: { size: 11, color: '#b9cad9' },
+            tickfont: { size: 11, color: '#1E293B' },
         },
         showlegend: false,
     });
@@ -664,14 +665,7 @@ function renderPortfolio(data) {
     const xLabels = data.points.map((point) => `P${point}`);
     const dates = Array.isArray(data.point_dates) ? data.point_dates : [];
 
-    const colors = [
-        '#42d9d0',
-        '#6aa6ff',
-        '#a78bfa',
-        '#f7c873',
-        '#ff7c86',
-        '#6fe0a9',
-    ];
+    const colors = CAT;
 
     const traces = data.series.map((series, index) => ({
         type: 'bar',
@@ -680,6 +674,7 @@ function renderPortfolio(data) {
         y: series.values,
         marker: {
             color: colors[index % colors.length],
+            line: { color: '#FFFFFF', width: 1.5 },
         },
         customdata: series.values.map((value, pointIndex) => [
             xLabels[pointIndex],
@@ -705,18 +700,18 @@ function renderPortfolio(data) {
             x: 0,
             font: {
                 size: 10,
-                color: '#a9bccd',
+                color: '#334155',
             },
         },
         xaxis: {
             title: {
                 text: 'Historical point',
-                font: { size: 11, color: '#8da3b8' },
+                font: { size: 11, color: '#475569' },
             },
             type: 'category',
             showgrid: false,
             zeroline: false,
-            tickfont: { size: 10, color: '#8da3b8' },
+            tickfont: { size: 10, color: '#475569' },
             tickmode: 'array',
             tickvals: xLabels,
             ticktext: xLabels,
@@ -725,13 +720,13 @@ function renderPortfolio(data) {
             title: {
                 text: 'Number of customers',
                 standoff: 12,
-                font: { size: 11, color: '#8da3b8' },
+                font: { size: 11, color: '#475569' },
             },
             rangemode: 'tozero',
             showgrid: true,
-            gridcolor: 'rgba(141,163,184,0.08)',
+            gridcolor: 'rgba(100,116,139,0.18)',
             zeroline: false,
-            tickfont: { size: 10, color: '#8da3b8' },
+            tickfont: { size: 10, color: '#475569' },
         },
         hovermode: 'closest',
     });
@@ -774,12 +769,12 @@ function chartBaseLayout(overrides = {}) {
             plot_bgcolor: 'rgba(0,0,0,0)',
             font: {
                 family: 'DM Sans, sans-serif',
-                color: '#a8bbce',
+                color: '#334155',
             },
             hoverlabel: {
-                bgcolor: '#102239',
-                bordercolor: '#28445d',
-                font_size: 11,
+                bgcolor: '#FFFFFF',
+                bordercolor: '#CBD5E1',
+                font: { size: 11, color: '#0F172A' },
             },
         },
         overrides
@@ -876,12 +871,12 @@ function escapeHtml(value) {
 // =============================================================
 
 const STAGE_COLORS = {
-    'Acquisition': '#6aa6ff',
-    'Onboarding': '#7dd3fc',
-    'Cross-Sell / Marketing': '#f7c873',
-    'Product Holding': '#6fe0a9',
-    'Service / Retention': '#a78bfa',
-    'Current State': '#42d9d0',
+    'Acquisition': '#1D4ED8',
+    'Onboarding': '#0891B2',
+    'Cross-Sell / Marketing': '#EA7A00',
+    'Product Holding': '#0E9F6E',
+    'Service / Retention': '#7E3AF2',
+    'Current State': '#0F172A',
 };
 
 function purgeChart(id) {
@@ -963,7 +958,7 @@ function renderJourney(events) {
     const shapes = events.map((_, i) => ({
         type: 'line',
         x0: xs[i], x1: xs[i], y0: 0, y1: levels[i],
-        line: { color: 'rgba(141,163,184,0.28)', width: 1 },
+        line: { color: 'rgba(100,116,139,0.40)', width: 1 },
         layer: 'below',
     }));
 
@@ -981,7 +976,7 @@ function renderJourney(events) {
     shapes.push({
         type: 'line',
         xref: 'paper', x0: 0, x1: 1, y0: 0, y1: 0,
-        line: { color: 'rgba(141,163,184,0.55)', width: 2 },
+        line: { color: '#94A3B8', width: 2 },
         layer: 'below',
     });
 
@@ -1004,11 +999,11 @@ function renderJourney(events) {
             marker: {
                 size: isCurrent ? 19 : 14,
                 symbol: isCurrent ? 'diamond' : 'circle',
-                color: STAGE_COLORS[stage] || '#8da3b8',
+                color: STAGE_COLORS[stage] || '#475569',
                 line: {
                     width: 2.5,
                     color: idx.map((i) =>
-                        events[i].status === 'Declined' ? '#ff7c86' : '#07111f'
+                        events[i].status === 'Declined' ? '#DC2626' : '#FFFFFF'
                     ),
                 },
             },
@@ -1031,7 +1026,7 @@ function renderJourney(events) {
         y: levels,
         text: events.map((e) => `<b>${wrapLabel(shortEventTitle(e.title), 20)}</b><br>${e.date}`),
         textposition: levels.map((l) => (l > 0 ? 'top center' : 'bottom center')),
-        textfont: { size: 10, color: '#c9d8e5' },
+        textfont: { size: 10, color: '#1E293B' },
         hoverinfo: 'skip',
         showlegend: false,
         cliponaxis: false,
@@ -1044,7 +1039,7 @@ function renderJourney(events) {
         showlegend: true,
         legend: {
             orientation: 'h', yanchor: 'top', y: -0.02, xanchor: 'center', x: 0.5,
-            font: { size: 10, color: '#a9bccd' },
+            font: { size: 10, color: '#334155' },
         },
         xaxis: Object.assign(
             {
@@ -1054,7 +1049,7 @@ function renderJourney(events) {
                 fixedrange: true,
             },
             timeScale
-                ? { type: 'date', tickformat: '%b %Y', tickfont: { size: 10, color: '#8da3b8' }, side: 'bottom' }
+                ? { type: 'date', tickformat: '%b %Y', tickfont: { size: 10, color: '#475569' }, side: 'bottom' }
                 : { showticklabels: false }
         ),
         yaxis: { range: [-3.1, 3.1], visible: false, fixedrange: true },
@@ -1190,18 +1185,18 @@ function renderBalancePosition(products) {
         height: 190,
         margin: { l: 24, r: 24, t: 24, b: 40 },
         shapes: [
-            { type: 'line', x0: r.p5, x1: r.p95, y0: 0.5, y1: 0.5, line: { color: 'rgba(141,163,184,0.35)', width: 2 } },
-            { type: 'rect', x0: r.p25, x1: r.p75, y0: 0.32, y1: 0.68, fillcolor: 'rgba(106,166,255,0.22)', line: { width: 0 } },
-            { type: 'line', x0: r.median, x1: r.median, y0: 0.24, y1: 0.76, line: { color: '#6aa6ff', width: 2 } },
+            { type: 'line', x0: r.p5, x1: r.p95, y0: 0.5, y1: 0.5, line: { color: '#94A3B8', width: 2 } },
+            { type: 'rect', x0: r.p25, x1: r.p75, y0: 0.32, y1: 0.68, fillcolor: 'rgba(29,78,216,0.14)', line: { width: 0 } },
+            { type: 'line', x0: r.median, x1: r.median, y0: 0.24, y1: 0.76, line: { color: '#1D4ED8', width: 2 } },
         ],
         annotations: [
-            { x: r.median, y: 0.8, text: `median ${formatNumber(r.median)}`, showarrow: false, font: { size: 10, color: '#8da3b8' } },
+            { x: r.median, y: 0.8, text: `median ${formatNumber(r.median)}`, showarrow: false, font: { size: 10, color: '#475569' } },
         ],
         xaxis: {
             range: [lo - pad, hi + pad],
-            showgrid: true, gridcolor: 'rgba(141,163,184,0.08)', zeroline: false,
-            tickfont: { size: 10, color: '#8da3b8' },
-            title: { text: 'Balance (P5–P95 whisker)', font: { size: 10, color: '#667e96' } },
+            showgrid: true, gridcolor: 'rgba(100,116,139,0.18)', zeroline: false,
+            tickfont: { size: 10, color: '#475569' },
+            title: { text: 'Balance (P5–P95 whisker)', font: { size: 10, color: '#64748B' } },
         },
         yaxis: { range: [0, 1], visible: false, fixedrange: true },
         showlegend: false,
@@ -1209,7 +1204,7 @@ function renderBalancePosition(products) {
 
     Plotly.react(container, [{
         type: 'scatter', mode: 'markers', x: [b], y: [0.5],
-        marker: { symbol: 'diamond', size: 16, color: '#42d9d0', line: { width: 2, color: '#07111f' } },
+        marker: { symbol: 'diamond', size: 16, color: '#EA7A00', line: { width: 2, color: '#FFFFFF' } },
         hovertemplate: `Customer balance: ${formatNumber(b)}<extra></extra>`,
     }], layout, { displayModeBar: false, responsive: true });
 }
@@ -1256,13 +1251,13 @@ function renderProductPortfolio() {
             y: items.map((i) => i.label),
             text: items.map((i) => `${i.pct}% · ${formatNumber(i.customers)}`),
             textposition: 'outside', cliponaxis: false,
-            marker: { color: items.map((_, i) => PALETTE[i % PALETTE.length]), opacity: 0.9 },
+            marker: { color: UI.primary },
             hovertemplate: '<b>%{y}</b><br>%{text}<extra></extra>',
         }], chartBaseLayout({
             height: 260,
             margin: { l: 110, r: 70, t: 10, b: 40 },
-            xaxis: { range: [0, 100], ticksuffix: '%', showgrid: true, gridcolor: 'rgba(141,163,184,0.08)', zeroline: false, tickfont: { size: 10, color: '#8da3b8' } },
-            yaxis: { autorange: 'reversed', automargin: true, tickfont: { size: 11, color: '#b9cad9' } },
+            xaxis: { range: [0, 100], ticksuffix: '%', showgrid: true, gridcolor: 'rgba(100,116,139,0.18)', zeroline: false, tickfont: { size: 10, color: '#475569' } },
+            yaxis: { autorange: 'reversed', automargin: true, tickfont: { size: 11, color: '#1E293B' } },
             showlegend: false,
         }), { displayModeBar: false, responsive: true });
     }
@@ -1306,13 +1301,13 @@ function renderProductBreakdown() {
     const labels = rows.map((r, i) => `${r.group}<br>n=${counts[i]}`);
     const traces = [{
         type: 'bar', name: 'Mean', x: labels, y: bar,
-        marker: { color: '#42d9d0', opacity: lowFlags.map((low) => (low ? FADE : 0.9)) },
+        marker: { color: '#1D4ED8', opacity: lowFlags.map((low) => (low ? FADE : 0.9)) },
         hovertemplate: '<b>%{x}</b><br>Mean: %{y:,.2f}<extra></extra>',
     }];
     if (median) {
         traces.push({
             type: 'scatter', mode: 'markers', name: 'Median', x: labels, y: median,
-            marker: { symbol: 'diamond', size: 11, color: '#f7c873', line: { width: 1.5, color: '#07111f' } },
+            marker: { symbol: 'diamond', size: 11, color: '#EA7A00', line: { width: 1.5, color: '#FFFFFF' } },
             hovertemplate: '<b>%{x}</b><br>Median: %{y:,.0f}<extra></extra>',
         });
     }
@@ -1321,12 +1316,12 @@ function renderProductBreakdown() {
         height: 360,
         margin: { l: 64, r: 20, t: 20, b: 80 },
         showlegend: !!median,
-        legend: { orientation: 'h', x: 0, y: 1.1, font: { size: 10, color: '#a9bccd' } },
-        xaxis: { type: 'category', tickfont: { size: 10, color: '#8da3b8' }, automargin: true },
+        legend: { orientation: 'h', x: 0, y: 1.1, font: { size: 10, color: '#334155' } },
+        xaxis: { type: 'category', tickfont: { size: 10, color: '#475569' }, automargin: true },
         yaxis: {
-            title: { text: yTitle, standoff: 8, font: { size: 11, color: '#8da3b8' } },
-            rangemode: 'tozero', showgrid: true, gridcolor: 'rgba(141,163,184,0.08)', zeroline: false,
-            tickfont: { size: 10, color: '#8da3b8' },
+            title: { text: yTitle, standoff: 8, font: { size: 11, color: '#475569' } },
+            rangemode: 'tozero', showgrid: true, gridcolor: 'rgba(100,116,139,0.18)', zeroline: false,
+            tickfont: { size: 10, color: '#475569' },
         },
         bargap: 0.3,
     }), { displayModeBar: false, responsive: true });
