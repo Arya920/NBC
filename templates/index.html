@@ -21,43 +21,42 @@
 
     <aside class="sidebar">
         <div class="sidebar-brand">
-            <div class="brand-mark">N</div>
+            <div class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4,17 9,12 13,15 19,7" />
+                    <polyline points="14.5,7 19,7 19,11.5" />
+                    <circle cx="4" cy="17" r="1.2" fill="currentColor" stroke="none" />
+                    <circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                    <circle cx="13" cy="15" r="1.2" fill="currentColor" stroke="none" />
+                </svg>
+            </div>
             <div>
                 <div class="sidebar-title">NBC Command Center</div>
-                <div class="sidebar-sub">Read-only customer and portfolio intelligence.</div>
+                <div class="sidebar-sub">Customer and portfolio intelligence</div>
             </div>
         </div>
 
-        <div class="sidebar-section customer-scope" id="customer-navigation-scope">
+        <div class="sidebar-section customer-scope scope-hidden" id="customer-navigation-scope">
             <div class="sidebar-label">Customer</div>
 
             <div class="customer-picker" id="customer-combobox">
                 <input
                     id="customer-search"
                     type="text"
-                    placeholder="Search synthetic_link_id"
+                    placeholder="Search customer ID"
                     autocomplete="off"
                     aria-label="Search customer"
                 />
-                <span class="picker-icon">⌕</span>
+                <span class="picker-icon" aria-hidden="true">⌕</span>
                 <ul class="customer-list hidden" id="customer-list"></ul>
-            </div>
-
-            <div class="sidebar-hint">
-                Select a customer to refresh all customer-level views.
             </div>
         </div>
 
         <div class="sidebar-section">
             <div class="sidebar-label">Dataset</div>
-            <div id="dataset-status" class="dataset-status">
-                <span class="status-chip">Loading…</span>
+            <div id="dataset-status" class="dataset-list">
+                <div class="dataset-row"><span>Loading…</span></div>
             </div>
-        </div>
-
-        <div class="sidebar-foot">
-            <span class="foot-dot"></span>
-            <span>Snapshot · read only</span>
         </div>
     </aside>
 
@@ -65,88 +64,50 @@
         <header class="topbar">
             <div>
                 <div class="brand-name">Next Best Action</div>
-                <div class="brand-sub">Customer decision intelligence · scored snapshot</div>
+                <div class="brand-sub">Customer decision intelligence</div>
             </div>
-            <div class="status-pill">LIVE SNAPSHOT</div>
         </header>
 
         <nav class="primary-nav" id="main-tabs" aria-label="Primary navigation">
-            <button class="primary-nav-link active" type="button" data-workspace="product">
-                Product
+            <button class="primary-nav-link active" type="button" data-workspace="executive" aria-current="page">
+                Executive Summary
             </button>
-            <button class="primary-nav-link" type="button" data-workspace="service">
-                Service
+            <button class="primary-nav-link" type="button" data-workspace="consumer" aria-current="false">
+                Consumer Specific
             </button>
         </nav>
 
-        <!-- Product -->
-        <section class="workspace-panel" data-workspace-panel="product">
-            <div class="service-header">
-                <div>
-                    <div class="eyebrow">Product intelligence</div>
-                    <h1>Product holdings</h1>
-                    <p>Customer-level holdings follow the sidebar selection. The portfolio section below is static and never changes with the selected customer.</p>
-                </div>
+        <!-- ===================== Executive Summary ===================== -->
+        <section class="workspace-panel active" data-workspace-panel="executive">
+            <div class="page-header">
+                <h1>Executive Summary</h1>
+                <p>Product holdings and next-best-action trends across the customer base.</p>
             </div>
 
-            <!-- Customer-level (follows selector) -->
-            <section class="content-section first-section">
+            <section class="section">
                 <div class="section-header">
-                    <div>
-                        <div class="section-kicker">01 · CUSTOMER-LEVEL</div>
-                        <h2>Holdings for <span class="accent-id" id="prod-customer-id">—</span></h2>
-                    </div>
-                    <div class="section-note">Follows customer selection</div>
+                    <h2>Portfolio overview</h2>
                 </div>
-
-                <div class="product-tiles" id="product-tiles"></div>
-
-                <div class="history-metrics product-kpis-3" id="product-customer-kpis">
-                    <div class="history-metric"><span>Products held</span><strong id="pk-count">—</strong><small id="pk-count-sub"></small></div>
-                    <div class="history-metric"><span>Balance maintained</span><strong id="pk-balance">—</strong><small id="pk-balance-sub"></small></div>
-                    <div class="history-metric"><span>Motor insurance premium</span><strong id="pk-premium">—</strong><small id="pk-premium-sub"></small></div>
-                </div>
-
-                <article class="chart-card product-balance-card">
-                    <div class="chart-card-head">
-                        <div>
-                            <div class="chart-kicker">CUSTOMER VS PORTFOLIO</div>
-                            <h3>Balance position</h3>
-                            <p>Shaded band is the portfolio interquartile range (P25–P75); the line is the portfolio median.</p>
-                        </div>
-                    </div>
-                    <div class="chart" id="chart-product-balance" style="min-height:190px"></div>
-                </article>
+                <div class="kpi-strip" id="exec-kpis"></div>
             </section>
 
-            <!-- Portfolio-level (static) -->
-            <section class="content-section">
+            <section class="section">
                 <div class="section-header">
-                    <div>
-                        <div class="section-kicker">02 · PORTFOLIO-LEVEL · STATIC</div>
-                        <h2>Portfolio product view</h2>
-                    </div>
-                    <div class="section-note">Independent of customer selection</div>
+                    <h2>Product portfolio</h2>
                 </div>
 
-                <div class="history-metrics product-kpis-4" id="product-portfolio-kpis"></div>
-
-                <div class="product-portfolio-layout">
-                    <article class="chart-card">
+                <div class="exec-product-layout">
+                    <article class="card chart-card">
                         <div class="chart-card-head">
-                            <div>
-                                <div class="chart-kicker">PENETRATION</div>
-                                <h3>Customers holding each product</h3>
-                                <p>Share of all customers.</p>
-                            </div>
+                            <h3>Product penetration</h3>
+                            <p>Share of customers holding each product.</p>
                         </div>
                         <div class="chart" id="chart-product-penetration" style="min-height:260px"></div>
                     </article>
 
-                    <article class="chart-card">
+                    <article class="card chart-card">
                         <div class="chart-card-head chart-head-controls">
                             <div>
-                                <div class="chart-kicker">BREAKDOWN</div>
                                 <h3>Product metrics by group</h3>
                             </div>
                             <div class="chart-controls">
@@ -172,285 +133,217 @@
                     </article>
                 </div>
             </section>
-        </section>
 
-        <!-- Service -->
-        <section class="workspace-panel active" data-workspace-panel="service">
-
-            <!-- Customer intelligence -->
-            <section class="service-page active" data-service-page="customer">
-                <div class="service-header">
-                    <div>
-                        <div class="eyebrow">Service intelligence</div>
-                        <h1>Customer intelligence</h1>
-                        <p>Current next-best actions, customer context and NBC1 history.</p>
-                    </div>
-
-                    <button class="portfolio-launch" id="open-portfolio" type="button">
-                        <span class="launch-kicker">PORTFOLIO VIEW</span>
-                        <span class="launch-title">Open NBC1 history</span>
-                        <span class="launch-arrow">→</span>
-                    </button>
+            <section class="section">
+                <div class="section-header">
+                    <h2>Next best action trends</h2>
                 </div>
 
-                <section class="customer-hero" id="customer-hero">
-                    <div class="hero-main">
-                        <div class="eyebrow">Selected customer</div>
-                        <div class="hero-id" id="hero-id">—</div>
-                    </div>
-                    <div class="hero-meta">
-                        <div class="hero-meta-item">
-                            <span>Score date</span>
-                            <strong id="hero-score-date">—</strong>
-                        </div>
-                        <div class="hero-meta-item">
-                            <span>Preferred channel</span>
-                            <strong id="hero-channel">—</strong>
-                        </div>
-                        <div class="hero-meta-item">
-                            <span>Last action</span>
-                            <strong id="hero-last-action-date">—</strong>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Current decision surface -->
-                <section class="content-section">
-                    <div class="section-header">
-                        <div>
-                            <div class="section-kicker">01</div>
-                            <h2>Current next-best actions</h2>
-                        </div>
-                        <div class="section-note">Current scored snapshot</div>
-                    </div>
-
-                    <div class="nbc-grid">
-                        <article class="nbc-card primary">
-                            <div class="card-kicker">NBC 1 · PRIMARY</div>
-                            <div class="nbc-value" id="nbc1-value">—</div>
-                            <div class="card-foot">Highest-priority action</div>
-                        </article>
-
-                        <article class="nbc-card">
-                            <div class="card-kicker">NBC 2 · SECONDARY</div>
-                            <div class="nbc-value" id="nbc2-value">—</div>
-                            <div class="card-foot">Secondary action</div>
-                        </article>
-
-                        <article class="nbc-card">
-                            <div class="card-kicker">NBC 3 · TERTIARY</div>
-                            <div class="nbc-value" id="nbc3-value">—</div>
-                            <div class="card-foot">Tertiary action</div>
-                        </article>
-                    </div>
-
-                    <div class="activity-grid">
-                        <article class="activity-card">
-                            <div class="card-kicker">RECENT ACTION</div>
-                            <div class="activity-value" id="ctx-last-action">—</div>
-                            <div class="activity-meta">
-                                <span id="ctx-channel">—</span>
-                                <span id="ctx-action-date">—</span>
-                            </div>
-                        </article>
-
-                        <article class="activity-card interaction">
-                            <div class="card-kicker">LAST INTERACTION</div>
-                            <div class="activity-date" id="interaction-date">—</div>
-                            <div class="activity-value interaction-value" id="interaction-text">
-                                —
-                            </div>
-                        </article>
-                    </div>
-                </section>
-
-                <!-- Customer journey -->
-                <section class="content-section journey-section">
-                    <div class="section-header">
-                        <div>
-                            <div class="section-kicker">02</div>
-                            <h2>Customer journey</h2>
-                        </div>
-                        <div class="section-note" id="journey-subtitle">Checkpoints from acquisition to current recommendation</div>
-                    </div>
-
-                    <article class="chart-card">
-                        <div class="chart-card-head chart-head-controls">
-                            <div>
-                                <div class="chart-kicker">CUSTOMER-LEVEL · TIMELINE</div>
-                                <h3>Journey checkpoints</h3>
-                                <p>Red outline marks a declined event. Hover a checkpoint for full detail.</p>
-                            </div>
-                            <div class="segmented" id="journey-mode" role="group" aria-label="Journey spacing">
-                                <button type="button" class="active" data-mode="even">Even spacing</button>
-                                <button type="button" data-mode="time">Time scale</button>
-                            </div>
-                        </div>
-                        <div class="chart" id="chart-journey" style="min-height:440px"></div>
-                        <div class="chart-empty hidden" id="journey-chart-empty">No journey events are available for this customer.</div>
-                    </article>
-
-                    <details class="source-details history-details">
-                        <summary>View all journey events</summary>
-                        <div class="profile-table" id="journey-table"></div>
-                    </details>
-                </section>
-
-                <!-- Customer context -->
-                <section class="content-section">
-                    <div class="section-header">
-                        <div>
-                            <div class="section-kicker">03</div>
-                            <h2>Customer context</h2>
-                        </div>
-                        <div class="section-note">Compact source profile view</div>
-                    </div>
-
-                    <div class="profile-grid">
-                        <article class="profile-card">
-                            <div class="profile-card-head">
-                                <div>
-                                    <div class="profile-kicker">TERM DEPOSIT</div>
-                                    <h3>Term deposit profile</h3>
-                                </div>
-                                <span class="profile-badge">TD</span>
-                            </div>
-
-                            <div class="profile-summary" id="term-profile-summary"></div>
-
-                            <details class="source-details">
-                                <summary>View full source fields</summary>
-                                <div class="profile-table" id="term-profile-full"></div>
-                            </details>
-                        </article>
-
-                        <article class="profile-card">
-                            <div class="profile-card-head">
-                                <div>
-                                    <div class="profile-kicker">INSURANCE</div>
-                                    <h3>Insurance profile</h3>
-                                </div>
-                                <span class="profile-badge">IN</span>
-                            </div>
-
-                            <div class="profile-summary" id="insurance-profile-summary"></div>
-
-                            <details class="source-details">
-                                <summary>View full source fields</summary>
-                                <div class="profile-table" id="insurance-profile-full"></div>
-                            </details>
-                        </article>
-                    </div>
-                </section>
-
-                <!-- Customer history -->
-                <section class="content-section history-section">
-                    <div class="section-header">
-                        <div>
-                            <div class="section-kicker">04</div>
-                            <h2>NBC1 history</h2>
-                        </div>
-                        <div class="section-note" id="history-subtitle">
-                            Historical behaviour across 18 points
-                        </div>
-                    </div>
-
-                    <div class="history-metrics">
-                        <div class="history-metric">
-                            <span>History points</span>
-                            <strong id="hs-points">—</strong>
-                        </div>
-                        <div class="history-metric">
-                            <span>Most frequent state</span>
-                            <strong id="hs-dominant">—</strong>
-                        </div>
-                        <div class="history-metric">
-                            <span>Latest historical NBC1</span>
-                            <strong id="hs-latest">—</strong>
-                        </div>
-                    </div>
-
-                    <div class="history-layout">
-                        <article class="chart-card">
-                            <div class="chart-card-head">
-                                <div>
-                                    <div class="chart-kicker">CUSTOMER-LEVEL</div>
-                                    <h3>NBC1 mix</h3>
-                                    <p>Frequency of each NBC1 state across this customer's history.</p>
-                                </div>
-                            </div>
-
-                            <div class="chart customer-history-chart" id="chart-customer-distribution"></div>
-                            <div class="chart-empty hidden" id="customer-chart-empty">
-                                No historical NBC1 records are available for this customer.
-                            </div>
-                        </article>
-
-                        <aside class="history-insight-column">
-                            <article class="insight-card">
-                                <div class="card-kicker">DOMINANT BEHAVIOUR</div>
-                                <strong id="hist-dominant">—</strong>
-                                <p id="hist-readout">—</p>
-                            </article>
-
-                            <article class="insight-card secondary">
-                                <div class="card-kicker">CURRENT VS HISTORY</div>
-                                <p class="insight-main" id="current-vs-history">—</p>
-                            </article>
-                        </aside>
-                    </div>
-
-                    <details class="source-details history-details">
-                        <summary>View all 18 historical points</summary>
-                        <div class="profile-table" id="history-table"></div>
-                    </details>
-                </section>
-            </section>
-
-            <!-- Portfolio history -->
-            <section class="service-page" data-service-page="portfolio">
-                <div class="service-header portfolio-header">
-                    <div>
-                        <div class="eyebrow">Service intelligence · Portfolio</div>
-                        <h1>NBC1 portfolio history</h1>
-                        <p>Portfolio-level composition across all customers and 18 historical points.</p>
-                    </div>
-
-                    <button class="back-button" id="back-to-customer" type="button">
-                        <span>←</span>
-                        Back to customer intelligence
-                    </button>
-                </div>
-
-                <div class="portfolio-intro">
-                    <div class="portfolio-intro-mark">18</div>
-                    <div>
-                        <div class="portfolio-intro-title">18-point portfolio view</div>
-                        <p>Each stacked bar contains only the three NBC1 states with the highest customer counts at that point.</p>
-                    </div>
-                </div>
-
-                <article class="chart-card portfolio-card">
+                <article class="card chart-card portfolio-card">
                     <div class="chart-card-head">
-                        <div>
-                            <div class="chart-kicker">PORTFOLIO-LEVEL · STATIC</div>
-                            <h3>NBC1 composition over time</h3>
-                            <p>Customer selection has no effect on this chart.</p>
-                        </div>
+                        <h3>NBC1 composition by historical point</h3>
+                        <p>The three most frequent NBC1 states at each point, by customer count.</p>
                     </div>
-
                     <div class="chart portfolio-chart" id="chart-portfolio"></div>
                     <div class="chart-empty hidden" id="portfolio-chart-empty">
                         Portfolio history could not be loaded.
                     </div>
                 </article>
             </section>
-
         </section>
 
-        <footer class="footer-note">
-            NBC Command Center · pre-scored CSV snapshot · no runtime model inference
-        </footer>
+        <!-- ===================== Consumer Specific ===================== -->
+        <section class="workspace-panel" data-workspace-panel="consumer">
+
+            <section class="customer-hero card" id="customer-hero">
+                <div>
+                    <div class="hero-label">Selected customer</div>
+                    <h1 class="hero-id" id="hero-id">—</h1>
+                </div>
+                <dl class="hero-meta">
+                    <div>
+                        <dt>Score date</dt>
+                        <dd id="hero-score-date">—</dd>
+                    </div>
+                    <div>
+                        <dt>Preferred channel</dt>
+                        <dd id="hero-channel">—</dd>
+                    </div>
+                    <div>
+                        <dt>Last action</dt>
+                        <dd id="hero-last-action-date">—</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <!-- Next best actions + activity -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>Next best actions</h2>
+                </div>
+
+                <div class="nba-grid">
+                    <article class="card nba-primary">
+                        <div class="card-kicker">NBC1 · Primary</div>
+                        <div class="nba-value" id="nbc1-value">—</div>
+                        <div class="card-foot">Highest-priority action</div>
+                    </article>
+
+                    <article class="card nba-secondary">
+                        <div class="nba-row">
+                            <div class="card-kicker">NBC2 · Secondary</div>
+                            <div class="nba-row-value" id="nbc2-value">—</div>
+                        </div>
+                        <div class="nba-row">
+                            <div class="card-kicker">NBC3 · Tertiary</div>
+                            <div class="nba-row-value" id="nbc3-value">—</div>
+                        </div>
+                    </article>
+                </div>
+
+                <article class="card activity-card">
+                    <div class="activity-col">
+                        <div class="card-kicker">Last action</div>
+                        <div class="activity-value" id="ctx-last-action">—</div>
+                    </div>
+                    <div class="activity-col">
+                        <div class="card-kicker">Last interaction</div>
+                        <div class="activity-date" id="interaction-date">—</div>
+                        <div class="activity-text" id="interaction-text">—</div>
+                    </div>
+                </article>
+            </section>
+
+            <!-- Journey -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>Customer journey</h2>
+                    <div class="section-note" id="journey-subtitle"></div>
+                </div>
+
+                <article class="card chart-card">
+                    <div class="chart-card-head chart-head-controls">
+                        <p class="chart-hint">Red outline marks a declined event. Hover a checkpoint for detail.</p>
+                        <div class="segmented" id="journey-mode" role="group" aria-label="Journey spacing">
+                            <button type="button" class="active" data-mode="even">Even spacing</button>
+                            <button type="button" data-mode="time">Time scale</button>
+                        </div>
+                    </div>
+                    <div class="chart" id="chart-journey" style="min-height:440px"></div>
+                    <div class="chart-empty hidden" id="journey-chart-empty">No journey events are available for this customer.</div>
+                </article>
+
+                <details class="source-details standalone">
+                    <summary>View all journey events</summary>
+                    <div class="table-wrap" id="journey-table"></div>
+                </details>
+            </section>
+
+            <!-- NBC1 history -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>NBC1 history</h2>
+                    <div class="section-note" id="history-subtitle"></div>
+                </div>
+
+                <div class="history-layout">
+                    <article class="card chart-card">
+                        <div class="chart-card-head">
+                            <h3>NBC1 mix</h3>
+                            <p>How often each NBC1 state appears in this customer's history.</p>
+                        </div>
+                        <div class="chart customer-history-chart" id="chart-customer-distribution"></div>
+                        <div class="chart-empty hidden" id="customer-chart-empty">
+                            No historical NBC1 records are available for this customer.
+                        </div>
+                    </article>
+
+                    <aside class="card summary-card">
+                        <h3>Summary</h3>
+                        <div class="kv-list">
+                            <div class="kv"><span>History points</span><strong id="hs-points">—</strong></div>
+                            <div class="kv"><span>Most frequent state</span><strong id="hs-dominant">—</strong></div>
+                            <div class="kv"><span>Latest historical NBC1</span><strong id="hs-latest">—</strong></div>
+                        </div>
+                        <p class="summary-text" id="hist-readout">—</p>
+                        <p class="callout" id="current-vs-history">—</p>
+                    </aside>
+                </div>
+
+                <details class="source-details standalone">
+                    <summary>View history</summary>
+                    <div class="table-wrap" id="history-table"></div>
+                </details>
+            </section>
+
+            <!-- Products -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>Products and balance</h2>
+                </div>
+
+                <div class="holdings-layout">
+                    <article class="card holdings-card">
+                        <div class="card-head">
+                            <h3>Product holdings</h3>
+                        </div>
+                        <ul class="holdings" id="product-list"></ul>
+                        <div class="kpi-strip flush">
+                            <div class="kpi">
+                                <span>Products held</span>
+                                <strong id="pk-count">—</strong>
+                                <small id="pk-count-sub"></small>
+                            </div>
+                            <div class="kpi">
+                                <span>Balance</span>
+                                <strong id="pk-balance">—</strong>
+                                <small id="pk-balance-sub"></small>
+                            </div>
+                            <div class="kpi">
+                                <span>Motor premium</span>
+                                <strong id="pk-premium">—</strong>
+                                <small id="pk-premium-sub"></small>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="card chart-card">
+                        <div class="chart-card-head">
+                            <h3>Balance position</h3>
+                            <p>Shaded band is the portfolio interquartile range; the line marks the median.</p>
+                        </div>
+                        <div class="chart" id="chart-product-balance" style="min-height:190px"></div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- Context -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>Customer context</h2>
+                </div>
+
+                <article class="card context-card">
+                    <div class="context-col">
+                        <h3>Term deposit profile</h3>
+                        <div class="kv-list" id="term-profile-summary"></div>
+                        <details class="source-details">
+                            <summary>View all fields</summary>
+                            <div class="table-wrap" id="term-profile-full"></div>
+                        </details>
+                    </div>
+
+                    <div class="context-col">
+                        <h3>Insurance profile</h3>
+                        <div class="kv-list" id="insurance-profile-summary"></div>
+                        <details class="source-details">
+                            <summary>View all fields</summary>
+                            <div class="table-wrap" id="insurance-profile-full"></div>
+                        </details>
+                    </div>
+                </article>
+            </section>
+        </section>
     </main>
 </div>
 

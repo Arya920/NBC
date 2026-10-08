@@ -1,15 +1,16 @@
 // =============================================================
 // NBC Command Center — frontend logic
+// Workspaces: "executive" (portfolio, customer-independent)
+//             "consumer"  (everything driven by the selected customer)
 // =============================================================
 
 const state = {
+    workspace: 'executive',
     customers: [],
     currentId: null,
     currentPayload: null,
-    portfolio: null,
-    workspace: 'service',
-    servicePage: 'customer',
     customerRequestSeq: 0,
+    portfolio: null,
     productPortfolio: null,
     productDim: 'age',
     productMetric: 'balance',
@@ -28,7 +29,7 @@ const CAT = [
     '#64748B', // slate
     '#92400E', // brown
 ];
-const UI = { primary: '#1D4ED8', accent: '#EA7A00', negative: '#DC2626', ink: '#0F172A' };
+const UI = { primary: '#1D4ED8' };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -37,8 +38,7 @@ document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
     bindNavigation();
-    setWorkspace('service');
-    setServicePage('customer');
+    setWorkspace('executive');
 
     await loadMeta();
     await loadCustomers();
@@ -62,14 +62,6 @@ function bindNavigation() {
         button.addEventListener('click', () => {
             setWorkspace(button.dataset.workspace);
         });
-    });
-
-    $('#open-portfolio')?.addEventListener('click', () => {
-        setServicePage('portfolio');
-    });
-
-    $('#back-to-customer')?.addEventListener('click', () => {
-        setServicePage('customer');
     });
 
     $('#product-metric')?.addEventListener('change', (event) => {
@@ -96,63 +88,41 @@ function setWorkspace(target) {
     state.workspace = target;
 
     $$('#main-tabs .primary-nav-link').forEach((button) => {
-        button.classList.toggle(
-            'active',
-            button.dataset.workspace === target
-        );
+        const active = button.dataset.workspace === target;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-current', active ? 'page' : 'false');
     });
 
     $$('[data-workspace-panel]').forEach((panel) => {
-        panel.classList.toggle(
-            'active',
-            panel.dataset.workspacePanel === target
-        );
+        panel.classList.toggle('active', panel.dataset.workspacePanel === target);
     });
 
-    updateCustomerScopeVisibility();
+    // The customer picker only applies to the consumer view.
+    $('#customer-navigation-scope')?.classList.toggle('scope-hidden', target !== 'consumer');
 
-    if (target === 'service') {
-        setServicePage(state.servicePage);
-    } else if (target === 'product') {
-        requestAnimationFrame(() => {
-            renderProductWorkspace();
-            resizeVisibleCharts();
-        });
-    }
-}
-
-function setServicePage(target) {
-    state.servicePage = target;
-
-    $$('[data-service-page]').forEach((page) => {
-        page.classList.toggle(
-            'active',
-            page.dataset.servicePage === target
-        );
-    });
-
-    updateCustomerScopeVisibility();
-
+    // Plotly needs a laid-out container, so render after the panel is shown.
     requestAnimationFrame(() => {
-        if (target === 'portfolio') {
-            renderPortfolio(state.portfolio);
-        } else if (target === 'customer') {
-            renderCurrentCustomerHistory();
-            renderJourney(state.currentPayload?.journey);
+        if (target === 'executive') {
+            renderExecutive();
+        } else {
+            renderConsumerCharts();
         }
-
         resizeVisibleCharts();
     });
 }
 
-function updateCustomerScopeVisibility() {
-    const onCustomerPage =
-        state.workspace === 'service' && state.servicePage === 'customer';
-    // The customer picker also drives the customer-level product section.
-    const showPicker = onCustomerPage || state.workspace === 'product';
+function renderExecutive() {
+    renderProductPortfolio();
+    if (state.portfolio) renderNbcPortfolio(state.portfolio);
+}
 
-    $('#customer-navigation-scope')?.classList.toggle('scope-hidden', !showPicker);
-    $('#customer-hero')?.classList.toggle('scope-hidden', !onCustomerPage);
+function renderConsumerCharts() {
+    const payload = state.currentPayload;
+    if (!payload) return;
+
+    renderJourney(payload.journey);
+    renderCustomerDistribution(payload.history);
+    renderBalancePosition(payload.products);
 }
 
 
@@ -171,13 +141,12 @@ async function loadMeta() {
         if (!el) return;
 
         el.innerHTML = `
-            <span class="status-chip">Snapshot · ${escapeHtml(data.snapshot_date)}</span>
-            <span class="status-chip">Customers · ${Number(data.customer_count || 0).toLocaleString()}</span>
-            <span class="status-chip">History rows · ${Number(data.history_rows || 0).toLocaleString()}</span>
+            <div class="dataset-row"><span>Data as of</span><strong>${escapeHtml(data.snapshot_date)}</strong></div>
+            <div class="dataset-row"><span>Customers</span><strong>${Number(data.customer_count || 0).toLocaleString()}</strong></div>
         `;
     } catch (error) {
         console.error('Meta load failed:', error);
-        setStatusMessage('Dataset status unavailable');
+        setStatusMessage('Dataset information unavailable');
     }
 }
 
@@ -271,7 +240,7 @@ async function selectCustomer(id) {
     const input = $('#customer-search');
     if (input) input.value = customerId;
 
-    // Clear the previous chart before loading the new customer's data.
+    // Clear previous charts before loading the new customer's data.
     clearCustomerHistoryChart();
     purgeChart('chart-journey');
     purgeChart('chart-product-balance');
@@ -292,13 +261,8 @@ async function selectCustomer(id) {
         const data = await response.json();
 
         // Ignore a slower response from an older selection.
-        if (requestSeq !== state.customerRequestSeq) {
-            return;
-        }
-
-        if (state.currentId !== customerId) {
-            return;
-        }
+        if (requestSeq !== state.customerRequestSeq) return;
+        if (state.currentId !== customerId) return;
 
         state.currentPayload = data;
         renderCustomer(data);
@@ -338,7 +302,7 @@ function renderCustomer(data) {
 
     renderHistory(data.history);
     renderJourney(data.journey);
-    renderProducts(data.products, data.hero?.id);
+    renderProducts(data.products);
 }
 
 function renderHero(hero) {
@@ -356,15 +320,10 @@ function renderNbc(nbc) {
 
 function renderActivity(activity, interaction) {
     setText('#ctx-last-action', activity?.last_action);
-    setText('#ctx-channel', activity?.channel);
-    setText('#ctx-action-date', activity?.action_date);
 
     if (!interaction) {
         setText('#interaction-date', 'No interaction date');
-        setText(
-            '#interaction-text',
-            'No interaction record was found for this customer.'
-        );
+        setText('#interaction-text', 'No interaction record was found for this customer.');
         return;
     }
 
@@ -377,20 +336,15 @@ function renderProfileSummary(selector, rows, limit, emptyText) {
     if (!container) return;
 
     if (!Array.isArray(rows) || rows.length === 0) {
-        container.innerHTML = `
-            <div class="profile-empty-inline">
-                <span>${escapeHtml(emptyText)}</span>
-            </div>
-        `;
+        container.innerHTML = `<div class="kv-empty">${escapeHtml(emptyText)}</div>`;
         return;
     }
 
-    const selected = rows.slice(0, limit);
-
-    container.innerHTML = selected
+    container.innerHTML = rows
+        .slice(0, limit)
         .map(
             (row) => `
-                <div class="profile-item">
+                <div class="kv">
                     <span>${escapeHtml(row.field)}</span>
                     <strong>${escapeHtml(row.value)}</strong>
                 </div>
@@ -434,14 +388,14 @@ function renderFullProfile(selector, rows) {
 
 
 // -------------------------------------------------------------
-// Customer history
+// Customer NBC1 history
 // -------------------------------------------------------------
 
 function setHistoryLoading() {
+    setText('#history-subtitle', '', '');
     setText('#hs-points', 'Loading…');
     setText('#hs-dominant', 'Loading…');
     setText('#hs-latest', 'Loading…');
-    setText('#hist-dominant', 'Loading…');
     setText('#hist-readout', 'Loading customer history…');
     setText('#current-vs-history', 'Loading…');
 
@@ -455,23 +409,23 @@ function renderHistory(history) {
     const chartEmpty = $('#customer-chart-empty');
 
     if (!history) {
+        setText('#history-subtitle', '', '');
         setText('#hs-points', '0');
         setText('#hs-dominant', '—');
         setText('#hs-latest', '—');
-        setText('#hist-dominant', 'No history');
         setText('#hist-readout', 'No historical NBC1 records are available.');
         setText('#current-vs-history', 'No comparison is available.');
-        $('#history-table').innerHTML = '';
+        const table = $('#history-table');
+        if (table) table.innerHTML = '';
         showChartEmpty(chartEmpty, true);
         clearCustomerHistoryChart();
         return;
     }
 
-    setText('#history-subtitle', `${history.total} historical points for ${state.currentId}`);
+    setText('#history-subtitle', `${history.total} historical points`);
     setText('#hs-points', history.total);
     setText('#hs-dominant', history.dominant);
     setText('#hs-latest', history.latest);
-    setText('#hist-dominant', history.dominant);
 
     setText(
         '#hist-readout',
@@ -490,16 +444,6 @@ function renderHistory(history) {
 
     requestAnimationFrame(() => {
         renderCustomerDistribution(history);
-    });
-}
-
-function renderCurrentCustomerHistory() {
-    if (!state.currentPayload?.history) {
-        return;
-    }
-
-    requestAnimationFrame(() => {
-        renderCustomerDistribution(state.currentPayload.history);
     });
 }
 
@@ -535,8 +479,7 @@ function renderHistoryTable(points) {
 
 function renderCustomerDistribution(history) {
     if (
-        state.workspace !== 'service' ||
-        state.servicePage !== 'customer' ||
+        state.workspace !== 'consumer' ||
         !history ||
         !Array.isArray(history.counts)
     ) {
@@ -544,9 +487,8 @@ function renderCustomerDistribution(history) {
     }
 
     const container = $('#chart-customer-distribution');
-    if (!container || typeof Plotly === 'undefined') {
-        return;
-    }
+    if (!container || typeof Plotly === 'undefined') return;
+    if (!isElementVisible(container)) return;
 
     const labels = history.counts.map((item) => item.state);
     const values = history.counts.map((item) => Number(item.value || 0));
@@ -562,9 +504,7 @@ function renderCustomerDistribution(history) {
             orientation: 'h',
             x: values,
             y: labels,
-            marker: {
-                color: UI.primary,
-            },
+            marker: { color: UI.primary },
             hovertemplate: '<b>%{y}</b><br>%{x} of historical points<extra></extra>',
         },
     ];
@@ -605,19 +545,12 @@ function renderCustomerDistribution(history) {
 }
 
 function clearCustomerHistoryChart() {
-    const container = $('#chart-customer-distribution');
-    if (!container || typeof Plotly === 'undefined') return;
-
-    try {
-        Plotly.purge(container);
-    } catch (error) {
-        console.warn('Could not clear customer history chart:', error);
-    }
+    purgeChart('chart-customer-distribution');
 }
 
 
 // -------------------------------------------------------------
-// Portfolio
+// Portfolio: NBC1 composition (executive)
 // -------------------------------------------------------------
 
 async function loadPortfolio() {
@@ -630,8 +563,8 @@ async function loadPortfolio() {
 
         state.portfolio = await response.json();
 
-        if (state.workspace === 'service' && state.servicePage === 'portfolio') {
-            requestAnimationFrame(() => renderPortfolio(state.portfolio));
+        if (state.workspace === 'executive') {
+            requestAnimationFrame(() => renderNbcPortfolio(state.portfolio));
         }
     } catch (error) {
         console.error('Portfolio load failed:', error);
@@ -639,18 +572,12 @@ async function loadPortfolio() {
     }
 }
 
-function renderPortfolio(data) {
-    if (
-        state.workspace !== 'service' ||
-        state.servicePage !== 'portfolio'
-    ) {
-        return;
-    }
+function renderNbcPortfolio(data) {
+    if (state.workspace !== 'executive') return;
 
     const container = $('#chart-portfolio');
-    if (!container || typeof Plotly === 'undefined') {
-        return;
-    }
+    if (!container || typeof Plotly === 'undefined') return;
+    if (!isElementVisible(container)) return;
 
     if (
         !data ||
@@ -665,15 +592,13 @@ function renderPortfolio(data) {
     const xLabels = data.points.map((point) => `P${point}`);
     const dates = Array.isArray(data.point_dates) ? data.point_dates : [];
 
-    const colors = CAT;
-
     const traces = data.series.map((series, index) => ({
         type: 'bar',
         name: series.state,
         x: xLabels,
         y: series.values,
         marker: {
-            color: colors[index % colors.length],
+            color: CAT[index % CAT.length],
             line: { color: '#FFFFFF', width: 1.5 },
         },
         customdata: series.values.map((value, pointIndex) => [
@@ -698,10 +623,7 @@ function renderPortfolio(data) {
             y: 1.02,
             xanchor: 'left',
             x: 0,
-            font: {
-                size: 10,
-                color: '#334155',
-            },
+            font: { size: 10, color: '#334155' },
         },
         xaxis: {
             title: {
@@ -746,15 +668,7 @@ function renderPortfolio(data) {
 
 function showPortfolioError() {
     showChartEmpty($('#portfolio-chart-empty'), true);
-
-    const container = $('#chart-portfolio');
-    if (container && typeof Plotly !== 'undefined') {
-        try {
-            Plotly.purge(container);
-        } catch (error) {
-            console.warn('Could not clear portfolio chart:', error);
-        }
-    }
+    purgeChart('chart-portfolio');
 }
 
 
@@ -768,7 +682,7 @@ function chartBaseLayout(overrides = {}) {
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: 'rgba(0,0,0,0)',
             font: {
-                family: 'DM Sans, sans-serif',
+                family: 'Inter, system-ui, sans-serif',
                 color: '#334155',
             },
             hoverlabel: {
@@ -795,12 +709,7 @@ function resizeVisibleCharts() {
         const element = document.getElementById(id);
 
         if (!element || !element.data) return;
-
-        const visible =
-            element.offsetWidth > 0 &&
-            element.offsetHeight > 0;
-
-        if (!visible) return;
+        if (!isElementVisible(element)) return;
 
         try {
             Plotly.Plots.resize(element);
@@ -813,6 +722,16 @@ function resizeVisibleCharts() {
 window.addEventListener('resize', () => {
     requestAnimationFrame(resizeVisibleCharts);
 });
+
+function purgeChart(id) {
+    const el = document.getElementById(id);
+    if (!el || typeof Plotly === 'undefined') return;
+    try { Plotly.purge(el); } catch (e) { /* nothing to purge */ }
+}
+
+function isElementVisible(el) {
+    return !!el && el.offsetWidth > 0 && el.offsetHeight > 0;
+}
 
 
 // -------------------------------------------------------------
@@ -828,6 +747,7 @@ function showCustomerEmpty(message) {
     setText('#nbc2-value', '—');
     setText('#nbc3-value', '—');
     setText('#ctx-last-action', message);
+    setText('#interaction-date', '—');
     setText('#interaction-text', '—');
 
     clearCustomerHistoryChart();
@@ -836,19 +756,18 @@ function showCustomerEmpty(message) {
 function setStatusMessage(message) {
     const el = $('#dataset-status');
     if (el) {
-        el.innerHTML = `<span class="status-chip">${escapeHtml(message)}</span>`;
+        el.innerHTML = `<div class="dataset-row"><span>${escapeHtml(message)}</span></div>`;
     }
 }
 
-function setText(selector, value) {
+function setText(selector, value, fallback = '—') {
     const element = $(selector);
     if (!element) return;
 
-    const text = value === null || value === undefined || value === ''
-        ? '—'
-        : String(value);
-
-    element.textContent = text;
+    element.textContent =
+        value === null || value === undefined || value === ''
+            ? fallback
+            : String(value);
 }
 
 function showChartEmpty(element, show) {
@@ -865,6 +784,18 @@ function escapeHtml(value) {
         .replace(/'/g, '&#039;');
 }
 
+function formatNumber(value) {
+    return value === null || value === undefined
+        ? '—'
+        : Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function ordinal(n) {
+    const v = n % 100;
+    const suffix = ['th', 'st', 'nd', 'rd'];
+    return n + (suffix[(v - 20) % 10] || suffix[v] || suffix[0]);
+}
+
 
 // =============================================================
 // Customer journey
@@ -878,16 +809,6 @@ const STAGE_COLORS = {
     'Service / Retention': '#7E3AF2',
     'Current State': '#0F172A',
 };
-
-function purgeChart(id) {
-    const el = document.getElementById(id);
-    if (!el || typeof Plotly === 'undefined') return;
-    try { Plotly.purge(el); } catch (e) { /* nothing to purge */ }
-}
-
-function isElementVisible(el) {
-    return !!el && el.offsetWidth > 0 && el.offsetHeight > 0;
-}
 
 function wrapLabel(text, width = 20) {
     const words = String(text ?? '').split(/\s+/);
@@ -931,8 +852,8 @@ function renderJourney(events) {
         `${events.length} checkpoints · ${events[0].date} → ${events[events.length - 1].date}`
     );
 
-    // Plotly needs a laid-out container; re-rendered when the page is shown.
-    if (state.workspace !== 'service' || state.servicePage !== 'customer') return;
+    // Plotly needs a laid-out container; re-rendered when the workspace is shown.
+    if (state.workspace !== 'consumer') return;
     if (!isElementVisible(container)) return;
 
     const timeScale = state.journeyMode === 'time';
@@ -1097,75 +1018,56 @@ function renderJourneyTable(events) {
 
 
 // =============================================================
-// Product view
+// Products — customer holdings (consumer)
 // =============================================================
 
-function formatNumber(value) {
-    return value === null || value === undefined
-        ? '—'
-        : Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
-
-function ordinal(n) {
-    const v = n % 100;
-    const suffix = ['th', 'st', 'nd', 'rd'];
-    return n + (suffix[(v - 20) % 10] || suffix[v] || suffix[0]);
-}
-
-function renderProductWorkspace() {
-    if (state.workspace !== 'product') return;
-    renderProducts(state.currentPayload?.products, state.currentPayload?.hero?.id);
-    renderProductPortfolio();
-}
-
-function renderProducts(products, customerId) {
-    setText('#prod-customer-id', customerId || state.currentId);
-
-    const tiles = $('#product-tiles');
-    if (!tiles) return;
+function renderProducts(products) {
+    const list = $('#product-list');
+    if (!list) return;
 
     if (!products) {
-        tiles.innerHTML = '<div class="profile-empty-inline">Product data unavailable for this customer.</div>';
+        list.innerHTML = '<li class="profile-empty-inline">Product data unavailable for this customer.</li>';
         setText('#pk-count', '—');
+        setText('#pk-count-sub', '', '');
         setText('#pk-balance', '—');
+        setText('#pk-balance-sub', '', '');
         setText('#pk-premium', '—');
+        setText('#pk-premium-sub', '', '');
         purgeChart('chart-product-balance');
         return;
     }
 
-    tiles.innerHTML = products.held.map((item) => {
-        let meta = item.held ? (item.date ? `Recorded ${item.date}` : 'Held') : 'No holding on record';
-        if (item.held && item.key === 'motor_insurance' && products.premium !== null) {
-            meta += ` · premium ${formatNumber(products.premium)}`;
-        }
+    list.innerHTML = products.held.map((item) => {
+        const hasDate = item.held && item.date && item.date !== '—';
         return `
-            <div class="product-tile ${item.held ? 'held' : ''}">
-                <div class="tile-label">${escapeHtml(item.label)}</div>
-                <div class="tile-status">${item.held ? 'Held' : 'Not held'}</div>
-                <div class="tile-meta">${escapeHtml(meta)}</div>
-            </div>`;
+            <li class="holding ${item.held ? 'held' : ''}">
+                <span class="holding-name">${escapeHtml(item.label)}</span>
+                <span class="holding-meta">${hasDate ? `Since ${escapeHtml(item.date)}` : ''}</span>
+                <span class="holding-status">${item.held ? 'Held' : 'Not held'}</span>
+            </li>`;
     }).join('');
 
     setText('#pk-count', `${products.count} of ${products.max}`);
-    setText('#pk-count-sub', 'Excludes the base current account every customer holds.');
+    setText('#pk-count-sub', 'Excludes the base current account', '');
 
     setText('#pk-balance', formatNumber(products.balance));
     setText(
         '#pk-balance-sub',
         products.balance_percentile === null
             ? ''
-            : `${ordinal(products.balance_percentile)} percentile · portfolio median ${formatNumber(products.ref.median)}`
+            : `${ordinal(products.balance_percentile)} percentile · median ${formatNumber(products.ref.median)}`,
+        ''
     );
 
     if (products.premium !== null) {
         setText('#pk-premium', formatNumber(products.premium));
-        setText('#pk-premium-sub', `Policyholder median ${formatNumber(products.ref.premium_median)}`);
+        setText('#pk-premium-sub', `Policyholder median ${formatNumber(products.ref.premium_median)}`, '');
     } else {
         setText('#pk-premium', '—');
-        setText('#pk-premium-sub', 'No active motor policy.');
+        setText('#pk-premium-sub', 'No active motor policy', '');
     }
 
-    if (state.workspace === 'product') {
+    if (state.workspace === 'consumer') {
         requestAnimationFrame(() => renderBalancePosition(products));
     }
 }
@@ -1209,6 +1111,11 @@ function renderBalancePosition(products) {
     }], layout, { displayModeBar: false, responsive: true });
 }
 
+
+// =============================================================
+// Products — portfolio (executive)
+// =============================================================
+
 async function loadProductPortfolio(dim) {
     try {
         const response = await fetch(
@@ -1220,7 +1127,7 @@ async function loadProductPortfolio(dim) {
         state.productDim = state.productPortfolio.dimension;
         const select = $('#product-dim');
         if (select) select.value = state.productDim;
-        if (state.workspace === 'product') {
+        if (state.workspace === 'executive') {
             requestAnimationFrame(renderProductPortfolio);
         }
     } catch (error) {
@@ -1228,19 +1135,33 @@ async function loadProductPortfolio(dim) {
     }
 }
 
-function renderProductPortfolio() {
-    const data = state.productPortfolio;
-    if (!data || state.workspace !== 'product') return;
+function renderPortfolioKpis(data) {
+    const container = $('#exec-kpis');
+    if (!container) return;
 
     const k = data.kpis;
-    const kpis = $('#product-portfolio-kpis');
-    if (kpis) {
-        kpis.innerHTML = `
-            <div class="history-metric"><span>Customers</span><strong>${formatNumber(k.customers)}</strong><small>${formatNumber(k.motor_holders)} hold motor insurance</small></div>
-            <div class="history-metric"><span>Products per customer</span><strong>${k.products_mean}</strong><small>Of 4 tracked products</small></div>
-            <div class="history-metric"><span>Hold no product</span><strong>${k.no_product_pct}%</strong><small>Cross-sell headroom</small></div>
-            <div class="history-metric"><span>Median balance</span><strong>${formatNumber(k.balance_median)}</strong><small>Mean ${formatNumber(k.balance_mean)} · ${k.negative_balance} negative</small></div>`;
-    }
+    const tracked = Array.isArray(data.penetration) ? data.penetration.length : 0;
+
+    const items = [
+        ['Customers', formatNumber(k.customers), `${formatNumber(k.motor_holders)} hold motor insurance`],
+        ['Products per customer', k.products_mean ?? '—', `Across ${tracked} tracked products`],
+        ['No product held', k.no_product_pct === null ? '—' : `${k.no_product_pct}%`, 'Cross-sell headroom'],
+        ['Median balance', formatNumber(k.balance_median), `Mean ${formatNumber(k.balance_mean)} · ${formatNumber(k.negative_balance)} negative`],
+    ];
+
+    container.innerHTML = items.map(([label, value, sub]) => `
+        <div class="kpi">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+            <small>${escapeHtml(sub)}</small>
+        </div>`).join('');
+}
+
+function renderProductPortfolio() {
+    const data = state.productPortfolio;
+    if (!data || state.workspace !== 'executive') return;
+
+    renderPortfolioKpis(data);
 
     const pen = $('#chart-product-penetration');
     if (pen && typeof Plotly !== 'undefined' && isElementVisible(pen)) {
@@ -1268,7 +1189,7 @@ function renderProductPortfolio() {
 function renderProductBreakdown() {
     const data = state.productPortfolio;
     const el = $('#chart-product-breakdown');
-    if (!data || !el || typeof Plotly === 'undefined' || state.workspace !== 'product') return;
+    if (!data || !el || typeof Plotly === 'undefined' || state.workspace !== 'executive') return;
     if (!isElementVisible(el)) return;
 
     const metric = state.productMetric;
@@ -1281,7 +1202,7 @@ function renderProductBreakdown() {
         yTitle = 'Products held per customer';
         lowFlags = rows.map((r) => r.low_n);
         counts = rows.map((r) => r.n);
-        note = `Mean of 4 tracked products. Faded bars have fewer than ${data.min_group_n} customers.`;
+        note = `Mean number of tracked products per customer. Faded bars have fewer than ${data.min_group_n} customers.`;
     } else if (metric === 'premium') {
         bar = rows.map((r) => r.premium_mean);
         median = rows.map((r) => r.premium_median);
