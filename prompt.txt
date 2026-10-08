@@ -1,0 +1,688 @@
+
+You are a senior full-stack data/AI application engineer and product designer.
+
+I will provide one or more datasets. Your task is to build a **complete, production-quality analytical web application from scratch** using those datasets as the source of truth.
+
+Do not treat this as a demo, notebook, or generic dashboard template.
+
+The objective is to create a **stakeholder-ready decision-support application** with a clean information architecture, meaningful analytics, strong visual hierarchy, and a professional enterprise UI.
+
+---
+
+# 1. FIRST UNDERSTAND THE DATA
+
+Before writing application code, inspect and understand all provided datasets.
+
+For each dataset, determine:
+
+- purpose
+- grain
+- primary/key fields
+- relationships between datasets
+- categorical variables
+- numerical variables
+- date/time fields
+- customer/entity identifiers
+- historical/time-series dimensions
+- target/outcome/recommendation fields
+- potential aggregation dimensions
+- fields suitable for individual-level analysis
+- fields suitable for portfolio/population-level analysis
+
+Do not assume that column names are self-explanatory.
+
+Inspect actual values, distributions, missingness, cardinality and relationships where useful.
+
+Do not invent business meaning that is not supported by the data.
+
+If a relationship between datasets is ambiguous, make the safest reasonable assumption and document it briefly.
+
+---
+
+# 2. DEFINE THE INFORMATION ARCHITECTURE BEFORE BUILDING UI
+
+Do not start by putting every available column into cards.
+
+First divide the available information into two major analytical levels:
+
+### A. Executive / Portfolio level
+
+Information describing the overall population, portfolio, segments, trends, distributions and aggregate behaviour.
+
+This should answer:
+
+> "What is happening overall?"
+
+Examples:
+
+- population KPIs
+- product/service penetration
+- segment distributions
+- portfolio composition
+- trends over time
+- aggregate outcomes
+- segment comparisons
+- portfolio recommendations
+- population-level behavioural patterns
+
+### B. Entity / Consumer level
+
+Information dependent on a selected individual entity such as a customer, account, policy, transaction group, employee, patient, etc.
+
+This should answer:
+
+> "What is happening with this specific entity?"
+
+Examples:
+
+- entity profile
+- current status/recommendation
+- recent activity
+- historical behaviour
+- journey/timeline
+- products/services held
+- entity-level comparisons against population
+- relevant contextual attributes
+
+The exact terminology should adapt to the domain.
+
+For example, if the data is about customers, use "Consumer" or "Customer"; if it is about accounts, use "Account"; if it is about products, use appropriate domain terminology.
+
+Do not blindly use generic labels where domain-specific terminology would be more natural.
+
+---
+
+# 3. PRIMARY NAVIGATION
+
+Use a simple two-level information architecture unless the data genuinely requires something different.
+
+Default structure:
+
+### `Executive Summary`
+Contains holistic, population-level information.
+
+### `Entity Specific`
+Contains information about the selected individual entity.
+
+For customer-oriented applications, `Entity Specific` can become:
+
+> `Consumer Specific`
+
+Do not create separate top-level tabs such as:
+
+- Product
+- Service
+- Marketing
+- History
+- Profile
+
+merely because the dataset contains those concepts.
+
+Those are **analytical dimensions**, not necessarily navigation structures.
+
+Organize them inside the two primary analytical contexts.
+
+---
+
+# 4. EXECUTIVE SUMMARY
+
+Design this page as a genuine executive/portfolio dashboard.
+
+It should tell a coherent story from:
+
+**Overall state → composition → important patterns → trends → actionable insights**
+
+Potential structure:
+
+### Overview
+A small number of high-value KPIs.
+
+### Portfolio / Population composition
+Useful distributions, penetration or composition charts.
+
+### Segment analysis
+Meaningful comparisons across demographic/business/behavioural dimensions.
+
+### Trends / historical behaviour
+Time-series or historical visualizations where supported by the data.
+
+### Key analytical insights
+Only include insights that can actually be derived from the dataset.
+
+Do not create ten KPI cards simply because ten metrics are available.
+
+Prioritize the metrics that help a stakeholder understand the business situation.
+
+---
+
+# 5. ENTITY-SPECIFIC PAGE
+
+The second page should behave like a decision-support workspace for one selected entity.
+
+A sensible default ordering is:
+
+### Entity overview
+- identifier
+- current status
+- current recommendation/outcome
+- important dates
+- important attributes
+
+### Current actions / recommendations
+If the dataset contains recommendations, priorities or next-best actions, make them prominent.
+
+### Recent activity
+Show the most relevant recent activity or interaction.
+
+### Journey / timeline
+If historical event data exists, provide a meaningful timeline.
+
+### Historical behaviour
+Use charts rather than dumping historical records into tables.
+
+### Products / services / holdings
+Show relevant entity-level relationships.
+
+### Additional context
+Secondary profile information should be compact or expandable.
+
+The exact sections should depend on the data.
+
+---
+
+# 6. DO NOT CREATE A "BOX DUMP"
+
+This is a critical design rule.
+
+Do NOT convert every variable into an individual card.
+
+Bad:
+
+`[Age] [Gender] [Occupation] [Balance] [Channel] [Date]`
+
+followed by another row of cards and another row of cards.
+
+This creates visual noise rather than analytical value.
+
+Instead use:
+
+- grouped metadata
+- compact information rows
+- inline attributes
+- tables where appropriate
+- expandable details
+- charts
+- meaningful composite components
+- whitespace
+
+A card should exist only when the information deserves visual emphasis.
+
+---
+
+# 7. CHART-FIRST ANALYTICAL DESIGN
+
+Use charts where they improve understanding.
+
+Potential chart types include:
+
+- bar charts
+- horizontal bar charts
+- stacked bars
+- line charts
+- area charts
+- distribution plots
+- cohort-style views
+- timelines
+- population-vs-entity comparisons
+- heatmaps
+- ranked tables
+
+Do not add charts simply to make the application look sophisticated.
+
+Every visualization should answer a clear analytical question.
+
+For every chart ask:
+
+> What decision or understanding does this visualization provide?
+
+If the answer is unclear, do not include it.
+
+---
+
+# 8. ENTITY VS POPULATION COMPARISON
+
+Where the data supports it, make comparisons between the selected entity and the broader population.
+
+For example:
+
+- customer's balance vs portfolio distribution
+- customer's product holdings vs population penetration
+- customer's behaviour vs segment behaviour
+- individual's historical recommendation vs current recommendation
+
+These comparisons are often more useful than displaying the raw value alone.
+
+However, do not fabricate benchmarks that cannot be calculated from the available data.
+
+---
+
+# 9. VISUAL DESIGN
+
+Use a professional enterprise analytics aesthetic.
+
+Default visual direction:
+
+- light theme
+- neutral light-gray background
+- white content surfaces
+- dark navy/charcoal navigation
+- restrained primary blue
+- subtle secondary accent
+- clean typography
+- thin borders
+- restrained shadows
+- moderate corner radius
+- generous whitespace
+- clear hierarchy
+
+Avoid:
+
+- dark neon dashboards
+- excessive gradients
+- glassmorphism
+- oversized illustrations
+- excessive animations
+- huge rounded cards
+- decorative UI with no analytical purpose
+
+The application should look like an internal enterprise product, not a design showcase.
+
+---
+
+# 10. PRODUCTION-READY LANGUAGE
+
+The UI should feel like a real application.
+
+Avoid labels such as:
+
+- `LIVE DEMO`
+- `DEMO DATA`
+- `SNAPSHOT · READ ONLY`
+- `STATIC VIEW`
+- `CUSTOMER-LEVEL`
+- `PORTFOLIO-LEVEL · STATIC`
+- `THIS DOES NOT CHANGE`
+- `FOLLOWING CUSTOMER SELECTION`
+
+unless such wording is genuinely necessary.
+
+Do not repeatedly explain the application's implementation.
+
+Use concise business terminology.
+
+Headings should describe the information itself rather than explain how the UI works.
+
+---
+
+# 11. BRANDING
+
+Create a restrained application identity.
+
+Include:
+
+- application name
+- simple professional icon/mark
+- clear navigation
+- consistent section hierarchy
+
+The icon should be subtle and related to the domain.
+
+Do not generate an elaborate logo unless specifically requested.
+
+---
+
+# 12. CUSTOMER / ENTITY SELECTION
+
+If the dataset contains an entity identifier:
+
+Provide a searchable selector.
+
+It should:
+
+- allow searching by ID
+- show matching entities
+- maintain the selected entity
+- update all entity-specific components
+- handle invalid/missing entities gracefully
+
+The Executive Summary must remain independent of entity selection.
+
+The Entity Specific page should update consistently when the selected entity changes.
+
+---
+
+# 13. DATA PROCESSING
+
+Build a proper data layer.
+
+Do not load and transform large datasets repeatedly inside UI rendering functions.
+
+Prefer:
+
+- one-time dataset loading
+- validation
+- normalization
+- reusable aggregation functions
+- cached/precomputed analytical summaries where appropriate
+- clean API/data-access functions
+
+Handle:
+
+- missing values
+- malformed dates
+- inconsistent categorical values
+- duplicate identifiers
+- numeric conversion
+- empty datasets
+- invalid selections
+
+Do not silently corrupt data while cleaning it.
+
+---
+
+# 14. BACKEND / API
+
+Use a clean backend architecture.
+
+For a Python application, Flask or FastAPI is acceptable.
+
+Separate:
+
+- application routes
+- data loading
+- data processing
+- analytical calculations
+- serialization/API responses
+- frontend rendering
+
+Example structure:
+
+```text
+project/
+│
+├── app.py
+├── data.py
+├── requirements.txt
+│
+├── data/
+│   ├── dataset_1.csv
+│   ├── dataset_2.csv
+│   └── ...
+│
+├── templates/
+│   └── index.html
+│
+└── static/
+    ├── app.js
+    └── style.css
+```
+
+If the project becomes complex, improve the structure rather than forcing everything into three files.
+
+---
+
+# 15. API DESIGN
+
+Expose only the data required by the frontend.
+
+Typical endpoints may include:
+
+```text
+/api/meta
+/api/entities
+/api/entity/<id>
+/api/portfolio
+/api/segment/<dimension>
+```
+
+Adapt these to the actual application.
+
+Do not expose raw datasets unnecessarily.
+
+Keep API responses structured and predictable.
+
+---
+
+# 16. FRONTEND
+
+Use a clean frontend architecture.
+
+For a lightweight internal application, vanilla JavaScript + HTML + CSS is preferred unless React or another framework is genuinely justified.
+
+Use:
+
+- modular rendering functions
+- centralized application state
+- clear navigation state
+- reusable chart helpers
+- reusable formatting functions
+- defensive error handling
+
+Do not create one enormous rendering function.
+
+---
+
+# 17. VISUALIZATION LIBRARY
+
+Plotly is preferred for analytical dashboards when appropriate.
+
+Charts should have:
+
+- readable titles
+- sensible axis labels
+- restrained colours
+- useful hover information
+- responsive sizing
+- appropriate margins
+- no unnecessary legends
+- no excessive gridlines
+
+Do not use a chart simply because the library supports it.
+
+---
+
+# 18. RESPONSIVENESS
+
+The application must work on:
+
+- desktop
+- laptop
+- tablet
+- smaller screens
+
+Maintain readable charts and layouts.
+
+Do not allow:
+
+- cards to become impossibly narrow
+- tables to break the page
+- charts to overflow
+- navigation to become unusable
+
+---
+
+# 19. ERROR / EMPTY STATES
+
+Implement graceful states for:
+
+- dataset unavailable
+- entity not found
+- no historical data
+- missing optional profile data
+- failed API calls
+- empty chart data
+
+Do not display JavaScript errors or broken UI to the user.
+
+Use concise messages.
+
+---
+
+# 20. WHAT NOT TO DO
+
+Do NOT:
+
+- invent KPIs
+- invent business rules
+- invent recommendations
+- fabricate missing data
+- create charts without analytical purpose
+- turn every column into UI
+- create excessive cards
+- overcomplicate navigation
+- change the business meaning of fields
+- hide important analytical information merely for visual simplicity
+- build a generic template without understanding the datasets
+
+---
+
+# 21. IMPLEMENTATION PROCESS
+
+Before writing the final application:
+
+### Step 1
+Inspect all datasets completely.
+
+### Step 2
+Create a data dictionary internally.
+
+### Step 3
+Identify relationships and analytical grain.
+
+### Step 4
+Separate information into:
+
+- Executive / population
+- Entity-specific
+
+### Step 5
+Identify the 5–10 most important analytical questions the application should answer.
+
+### Step 6
+Map each question to either:
+
+- KPI
+- chart
+- table
+- timeline
+- comparison
+- textual insight
+
+### Step 7
+Design the information architecture.
+
+### Step 8
+Implement the backend/data layer.
+
+### Step 9
+Implement the frontend.
+
+### Step 10
+Validate every chart and interaction against the underlying data.
+
+---
+
+# 22. QUALITY CHECK
+
+Before returning the application, verify:
+
+### Data
+- [ ] All datasets load correctly
+- [ ] Relationships are correct
+- [ ] Dates are parsed correctly
+- [ ] Missing values are handled
+- [ ] Aggregations are correct
+
+### Executive Summary
+- [ ] Contains only population-level information
+- [ ] Has a coherent analytical story
+- [ ] Contains only high-value KPIs
+- [ ] Charts have clear purpose
+- [ ] No unnecessary information density
+
+### Entity Specific
+- [ ] Entity selector works
+- [ ] Current entity information updates correctly
+- [ ] Historical charts update correctly
+- [ ] Journey/timeline works if applicable
+- [ ] Entity-vs-population comparisons are correct
+- [ ] Supporting information is compact
+- [ ] No "box dump"
+
+### UI
+- [ ] Professional enterprise appearance
+- [ ] Light theme
+- [ ] Clear hierarchy
+- [ ] Consistent typography
+- [ ] Consistent spacing
+- [ ] Responsive layout
+- [ ] No demo/prototype language
+- [ ] No unnecessary decorative components
+
+### Engineering
+- [ ] No broken selectors
+- [ ] No unused major rendering logic
+- [ ] No unnecessary duplicate calculations
+- [ ] API responses are stable
+- [ ] Errors are handled
+- [ ] Code is reasonably modular
+
+---
+
+# 23. FINAL OUTPUT
+
+Return the **complete runnable project**.
+
+Provide:
+
+```text
+project/
+├── app.py
+├── data.py
+├── requirements.txt
+├── data/
+├── templates/
+│   └── index.html
+└── static/
+    ├── app.js
+    └── style.css
+```
+
+Return the complete contents of every generated source file.
+
+Do not provide pseudo-code.
+
+Do not omit sections with comments such as:
+
+```text
+# remaining code
+```
+
+Do not use placeholders for implementation.
+
+The application should be runnable after installing the dependencies and placing the supplied datasets in the expected data directory.
+
+Also provide a concise `README.md` containing:
+
+- project purpose
+- dataset expectations
+- folder structure
+- installation
+- how to run
+- available configuration points
+
+Most importantly:
+
+**Build the application around analytical questions and information hierarchy, not around the number of columns in the datasets.**
+
+The final product should make a stakeholder understand the important information within seconds, while allowing an analyst to drill into the underlying entity-level detail when needed.
